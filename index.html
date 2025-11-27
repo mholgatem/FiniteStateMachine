@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finite State Machine Designer</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+<body class="light" oncontextmenu="return false;">
+  <div id="landing" class="dialog-backdrop">
+    <div class="dialog">
+      <h1>Finite State Machine Designer</h1>
+      <p>Create or load a state machine project.</p>
+      <div class="dialog-actions">
+        <button id="newMachineBtn" class="primary">+ New State Machine</button>
+        <label class="file-label">
+          <input type="file" id="loadMachineInput" accept="application/json" hidden />
+          <span>Load State Machine</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div id="newMachineDialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <h2>New State Machine</h2>
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="machineName" placeholder="My State Machine" />
+      </div>
+      <div class="form-row">
+        <label>Machine Type</label>
+        <select id="machineType">
+          <option value="moore">Moore</option>
+          <option value="mealy">Mealy</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Number of States (max 32)</label>
+        <input type="number" id="stateCount" min="1" max="32" value="4" />
+      </div>
+      <div class="form-row">
+        <label>Input variables (comma separated)</label>
+        <input type="text" id="inputVars" placeholder="x,y" />
+      </div>
+      <div class="form-row">
+        <label>Output variables (comma separated)</label>
+        <input type="text" id="outputVars" placeholder="z" />
+      </div>
+      <div class="dialog-actions">
+        <button id="createMachine" class="primary">Create</button>
+        <button data-close="newMachineDialog">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="arrowDialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <h2>Transition Details</h2>
+      <div class="form-row">
+        <label>Input values</label>
+        <input type="text" id="arrowInputs" placeholder="1,0 or A,~B" />
+      </div>
+      <div class="form-row" id="mealyOutputRow">
+        <label>Output values</label>
+        <input type="text" id="arrowOutputs" placeholder="Z or ~Z" />
+      </div>
+      <div class="dialog-actions">
+        <button id="saveArrow" class="primary">Save</button>
+        <button data-close="arrowDialog">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <button id="toggleTable" class="icon-btn" title="Toggle definition table">☰</button>
+      <h3 id="toolbarTitle">Untitled Machine</h3>
+    </div>
+    <div class="toolbar-actions">
+      <button id="quickRef" class="ghost">Quick Reference</button>
+      <button id="toggleTheme" class="ghost">Light/Dark</button>
+      <button id="saveImageTable" class="ghost">Save Table Image</button>
+      <button id="saveImageDiagram" class="ghost">Save Diagram Image</button>
+      <label class="file-label">
+        <input type="file" id="loadButton" accept="application/json" hidden />
+        <span>Load</span>
+      </label>
+      <button id="saveButton" class="primary">Download Save</button>
+    </div>
+  </header>
+
+  <div id="tablePanel" class="table-panel expanded">
+    <div class="table-controls">
+      <div class="form-row inline">
+        <label>Machine Name</label>
+        <input type="text" id="nameControl" />
+      </div>
+      <div class="form-row inline">
+        <label>Type</label>
+        <select id="typeControl">
+          <option value="moore">Moore</option>
+          <option value="mealy">Mealy</option>
+        </select>
+      </div>
+      <div class="form-row inline">
+        <label>States</label>
+        <input type="number" id="stateControl" min="1" max="32" />
+      </div>
+      <div class="form-row inline">
+        <label>Inputs</label>
+        <input type="text" id="inputsControl" />
+      </div>
+      <div class="form-row inline">
+        <label>Outputs</label>
+        <input type="text" id="outputsControl" />
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table id="stateTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Description</th>
+            <th>Label</th>
+            <th>Binary</th>
+            <th class="moore-only">Outputs</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <main class="workspace">
+    <aside class="state-palette">
+      <h4>Unplaced States</h4>
+      <div id="paletteList"></div>
+    </aside>
+    <section class="playmat">
+      <svg id="diagram" width="100%" height="100%"></svg>
+    </section>
+  </main>
+
+  <div id="quickRefDialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <h2>Quick Reference</h2>
+      <ul>
+        <li>Drag states from the left column onto the playmat.</li>
+        <li>Ctrl + Drag a state to resize it.</li>
+        <li>Right-click a state to start a transition, left-click a target state to finish.</li>
+        <li>Drag the midpoint handle on an arrow to curve it.</li>
+        <li>Backspace with an arrow selected removes it.</li>
+        <li>Right-click an arrow to set inputs (and outputs for Mealy).</li>
+      </ul>
+      <div class="dialog-actions">
+        <button data-close="quickRefDialog">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <template id="paletteItemTemplate">
+    <div class="palette-item" draggable="true">
+      <div class="state-circle"></div>
+      <div class="state-meta">
+        <div class="state-label"></div>
+        <div class="state-extra"></div>
+      </div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
