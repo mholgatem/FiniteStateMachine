@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finite State Machine Designer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="toolbar">
+            <h1>FSM Designer</h1>
+            <div class="toolbar-buttons">
+                <button id="addStateBtn" class="btn btn-primary">+ Add State</button>
+                <button id="saveBtn" class="btn btn-secondary">Save</button>
+                <button id="loadBtn" class="btn btn-secondary">Load</button>
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+                <button id="clearBtn" class="btn btn-danger">Clear All</button>
+            </div>
+        </header>
+        
+        <main class="workspace-container">
+            <aside class="sidebar">
+                <h2>Components</h2>
+                <div class="component-palette">
+                    <div class="component-item" draggable="true" data-type="state">
+                        <div class="component-preview state-preview"></div>
+                        <span>State</span>
+                    </div>
+                    <div class="component-item" draggable="true" data-type="start-state">
+                        <div class="component-preview start-state-preview"></div>
+                        <span>Start State</span>
+                    </div>
+                    <div class="component-item" draggable="true" data-type="end-state">
+                        <div class="component-preview end-state-preview"></div>
+                        <span>End State</span>
+                    </div>
+                </div>
+                
+                <h2>Instructions</h2>
+                <ul class="instructions">
+                    <li>Drag components from the palette to the canvas</li>
+                    <li>Click on a state to select it</li>
+                    <li>Double-click to edit state name</li>
+                    <li>Hold Shift and click two states to create a transition</li>
+                    <li>Click on a transition to edit its label</li>
+                    <li>Right-click to delete states or transitions</li>
+                </ul>
+            </aside>
+            
+            <div class="canvas-wrapper">
+                <svg id="canvas" class="canvas">
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+                        </marker>
+                    </defs>
+                    <g id="transitions-layer"></g>
+                    <g id="states-layer"></g>
+                </svg>
+            </div>
+        </main>
+        
+        <div id="editModal" class="modal hidden">
+            <div class="modal-content">
+                <h3 id="modalTitle">Edit State</h3>
+                <input type="text" id="editInput" placeholder="Enter name...">
+                <div class="modal-buttons">
+                    <button id="modalSave" class="btn btn-primary">Save</button>
+                    <button id="modalCancel" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
