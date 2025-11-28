@@ -13,7 +13,7 @@
 body.dark {
   --bg: #111827;
   --bg-muted: #1f2937;
-  --text: #e5e7eb;
+  --text: #ffffff;
   --primary: #8b9cf9;
   --border: #374151;
   --accent: #1f2937;
@@ -100,12 +100,14 @@ body {
   border-bottom: 1px solid var(--border);
   max-height: 420px;
   transition: max-height 0.3s ease;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .table-panel.collapsed {
   max-height: 0;
   border-bottom: none;
+  overflow: hidden;
 }
 
 .table-controls {
@@ -271,6 +273,7 @@ button:active {
 svg text {
   user-select: none;
   pointer-events: none;
+  fill: var(--text);
 }
 
 .state-node {
@@ -306,9 +309,51 @@ svg text {
   cursor: pointer;
 }
 
-.arrow-label {
+.label-handle {
+  cursor: pointer;
+}
+
+.label-handle rect {
+  fill: var(--surface);
+  stroke: var(--primary);
+  stroke-width: 1.5px;
+  rx: 6px;
+  ry: 6px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.label-handle text {
   font-size: 12px;
-  background: rgba(255,255,255,0.7);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.io-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.io-row {
+  display: grid;
+  grid-template-columns: 120px repeat(3, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.io-row label {
+  font-weight: 600;
+}
+
+.io-options {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.io-options span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .hidden {

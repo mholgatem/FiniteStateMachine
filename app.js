@@ -12,6 +12,7 @@ let currentArrow = null;
 let selectedArrowId = null;
 let arrowDialogTarget = null;
 let previewPath = null;
+let deletedTransitions = [];
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -25,6 +26,8 @@ const toggleTableBtn = document.getElementById('toggleTable');
 const tablePanel = document.getElementById('tablePanel');
 const toolbarTitle = document.getElementById('toolbarTitle');
 const mealyOutputRow = document.getElementById('mealyOutputRow');
+const inputChoices = document.getElementById('inputChoices');
+const outputChoices = document.getElementById('outputChoices');
 
 function closeDialog(id) {
   document.getElementById(id).classList.add('hidden');
@@ -39,6 +42,44 @@ function parseList(value) {
     .split(',')
     .map((v) => v.trim())
     .filter(Boolean);
+}
+
+function defaultSelections(count, fallbackText = '') {
+  const base = Array(count).fill('X');
+  if (!fallbackText) return base;
+  const clean = fallbackText.replace(/\s+/g, '');
+  for (let i = 0; i < Math.min(count, clean.length); i += 1) {
+    if (['0', '1', 'X', '-'].includes(clean[i])) {
+      base[i] = clean[i] === '-' ? 'X' : clean[i];
+    }
+  }
+  return base;
+}
+
+function selectionLabel(names, values) {
+  if (!names.length) return (values || []).join('');
+  return names
+    .map((name, idx) => {
+      const val = (values && values[idx]) || 'X';
+      return `${name}=${val}`;
+    })
+    .join(', ');
+}
+
+function normalizeTransition(tr) {
+  if (!Array.isArray(tr.inputValues)) {
+    tr.inputValues = defaultSelections(state.inputs.length, tr.inputs || '');
+  }
+  tr.inputValues = (tr.inputValues || []).slice(0, state.inputs.length);
+  while (tr.inputValues.length < state.inputs.length) tr.inputValues.push('X');
+  if (state.type === 'mealy') {
+    if (!Array.isArray(tr.outputValues)) {
+      tr.outputValues = defaultSelections(state.outputs.length, tr.outputs || '');
+    }
+    tr.outputValues = (tr.outputValues || []).slice(0, state.outputs.length);
+    while (tr.outputValues.length < state.outputs.length) tr.outputValues.push('X');
+  }
+  tr.labelT = tr.labelT === undefined ? 0.5 : tr.labelT;
 }
 
 function initStates() {
@@ -186,6 +227,7 @@ function quadraticPath(from, to, arcOffset = 0) {
 }
 
 function drawTransition(tr) {
+  normalizeTransition(tr);
   const from = state.states.find((s) => s.id === tr.from);
   const to = state.states.find((s) => s.id === tr.to);
   if (!from || !to) return;
@@ -196,26 +238,49 @@ function drawTransition(tr) {
   if (selectedArrowId === tr.id) path.classList.add('selected');
   path.dataset.id = tr.id;
 
+  diagram.appendChild(path);
+
+  const totalLength = path.getTotalLength();
+  const midPoint = path.getPointAtLength(totalLength / 2);
   const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   handle.classList.add('arc-handle');
   handle.setAttribute('r', 7);
-  handle.setAttribute('cx', pathInfo.ctrl.x);
-  handle.setAttribute('cy', pathInfo.ctrl.y);
+  handle.setAttribute('cx', midPoint.x);
+  handle.setAttribute('cy', midPoint.y);
   handle.dataset.id = tr.id;
 
-  const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  label.classList.add('arrow-label');
-  label.setAttribute('text-anchor', 'middle');
-  label.setAttribute('x', pathInfo.ctrl.x);
-  label.setAttribute('y', pathInfo.ctrl.y - 8);
-  const labelText = [];
-  if (tr.inputs) labelText.push(formatIO(tr.inputs));
-  if (state.type === 'mealy' && tr.outputs) labelText.push(formatIO(tr.outputs));
-  label.innerHTML = labelText.join(' | ');
+  const clampedT = Math.min(0.95, Math.max(0.05, tr.labelT || 0.5));
+  tr.labelT = clampedT;
+  const labelPoint = path.getPointAtLength(totalLength * clampedT);
+  const labelGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  labelGroup.classList.add('label-handle');
+  labelGroup.dataset.id = tr.id;
+  labelGroup.setAttribute('transform', `translate(${labelPoint.x} ${labelPoint.y})`);
 
-  diagram.appendChild(path);
+  const labelText = [];
+  labelText.push(selectionLabel(state.inputs, tr.inputValues));
+  if (state.type === 'mealy' && state.outputs.length) {
+    labelText.push(selectionLabel(state.outputs, tr.outputValues));
+  }
+  const labelString = labelText.filter(Boolean).join(' | ') || 'Set I/O';
+  const labelWidth = Math.max(46, labelString.length * 7 + 12);
+
+  const labelRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  labelRect.setAttribute('x', -labelWidth / 2);
+  labelRect.setAttribute('y', -16);
+  labelRect.setAttribute('width', labelWidth);
+  labelRect.setAttribute('height', 24);
+
+  const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  label.setAttribute('text-anchor', 'middle');
+  label.setAttribute('y', 2);
+  label.textContent = labelString;
+
+  labelGroup.appendChild(labelRect);
+  labelGroup.appendChild(label);
+
   diagram.appendChild(handle);
-  diagram.appendChild(label);
+  diagram.appendChild(labelGroup);
 }
 
 function drawPreview() {
@@ -237,11 +302,53 @@ function formatIO(text) {
   return text.replace(/_([A-Za-z0-9]+)/g, '<tspan baseline-shift="sub">$1</tspan>');
 }
 
+function buildChoiceRow(container, name, index, currentValue, prefix) {
+  const row = document.createElement('div');
+  row.className = 'io-row';
+  const label = document.createElement('label');
+  label.textContent = name || `Var ${index + 1}`;
+  row.appendChild(label);
+
+  const options = document.createElement('div');
+  options.className = 'io-options';
+  ['1', '0', 'X'].forEach((val) => {
+    const span = document.createElement('span');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = `${prefix}-${index}`;
+    input.value = val;
+    if (currentValue === val) input.checked = true;
+    const optLabel = document.createElement('span');
+    optLabel.textContent = val === 'X' ? "Don't care" : val;
+    span.appendChild(input);
+    span.appendChild(optLabel);
+    options.appendChild(span);
+  });
+  row.appendChild(options);
+  container.appendChild(row);
+}
+
+function populateChoices(container, names, values, prefix) {
+  container.innerHTML = '';
+  names.forEach((name, idx) => {
+    buildChoiceRow(container, name, idx, values[idx] || 'X', prefix);
+  });
+}
+
+function readChoices(container, names, prefix) {
+  return names.map((_, idx) => {
+    const checked = container.querySelector(`input[name="${prefix}-${idx}"]:checked`);
+    return checked ? checked.value : 'X';
+  });
+}
+
 function openArrowDialog(targetId) {
   arrowDialogTarget = targetId;
   const tr = state.transitions.find((t) => t.id === targetId);
-  document.getElementById('arrowInputs').value = tr?.inputs || '';
-  document.getElementById('arrowOutputs').value = tr?.outputs || '';
+  normalizeTransition(tr);
+  populateChoices(inputChoices, state.inputs, tr.inputValues, 'input');
+  populateChoices(outputChoices, state.outputs, tr.outputValues || defaultSelections(state.outputs.length), 'output');
+  mealyOutputRow.style.display = state.type === 'mealy' ? 'flex' : 'none';
   openDialog('arrowDialog');
 }
 
@@ -280,6 +387,23 @@ function withPrevent(fn) {
     e.preventDefault();
     fn(e);
   };
+}
+
+function nearestTOnPath(path, point) {
+  const total = path.getTotalLength();
+  let closestT = 0.5;
+  let minDist = Infinity;
+  const steps = 80;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const pt = path.getPointAtLength(total * t);
+    const dist = Math.hypot(pt.x - point.x, pt.y - point.y);
+    if (dist < minDist) {
+      minDist = dist;
+      closestT = t;
+    }
+  }
+  return closestT;
 }
 
 function attachEvents() {
@@ -348,12 +472,22 @@ function attachEvents() {
 
   document.getElementById('inputsControl').addEventListener('change', (e) => {
     state.inputs = parseList(e.target.value);
+    state.transitions.forEach((t) => {
+      t.inputValues = (t.inputValues || []).slice(0, state.inputs.length);
+      while (t.inputValues.length < state.inputs.length) t.inputValues.push('X');
+      t.inputs = selectionLabel(state.inputs, t.inputValues);
+    });
     renderDiagram();
   });
 
   document.getElementById('outputsControl').addEventListener('change', (e) => {
     state.outputs = parseList(e.target.value);
     state.states.forEach((s) => (s.outputs = state.outputs.map(() => '0')));
+    state.transitions.forEach((t) => {
+      t.outputValues = (t.outputValues || []).slice(0, state.outputs.length);
+      while (t.outputValues.length < state.outputs.length) t.outputValues.push('X');
+      t.outputs = selectionLabel(state.outputs, t.outputValues);
+    });
     renderTable();
     renderPalette();
     renderDiagram();
@@ -413,6 +547,7 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mousedown', (e) => {
+    const targetLabelHandle = e.target.closest('.label-handle');
     const targetState = e.target.closest('circle.state-node');
     const targetHandle = e.target.closest('circle.arc-handle');
     const targetPath = e.target.closest('path.arrow-path');
@@ -420,7 +555,30 @@ function attachEvents() {
       selectedArrowId = parseInt(targetPath.dataset.id, 10);
       renderDiagram();
     }
+    if (targetLabelHandle) {
+      const id = parseInt(targetLabelHandle.dataset.id, 10);
+      selectedArrowId = id;
+      renderDiagram();
+      const tr = state.transitions.find((t) => t.id === id);
+      if (!tr) return;
+      const moveHandler = (ev) => {
+        const pathEl = diagram.querySelector(`path.arrow-path[data-id="${id}"]`);
+        if (!pathEl) return;
+        const pt = getSVGPoint(ev.clientX, ev.clientY);
+        tr.labelT = nearestTOnPath(pathEl, pt);
+        renderDiagram();
+      };
+      const upHandler = () => {
+        document.removeEventListener('mousemove', moveHandler);
+        document.removeEventListener('mouseup', upHandler);
+      };
+      document.addEventListener('mousemove', moveHandler);
+      document.addEventListener('mouseup', upHandler);
+      return;
+    }
     if (targetHandle) {
+      selectedArrowId = parseInt(targetHandle.dataset.id, 10);
+      renderDiagram();
       const tr = state.transitions.find((t) => t.id === parseInt(targetHandle.dataset.id, 10));
       if (!tr) return;
       const moveHandler = (ev) => {
@@ -500,6 +658,9 @@ function attachEvents() {
           inputs: '',
           outputs: '',
           arcOffset: 0,
+          inputValues: defaultSelections(state.inputs.length),
+          outputValues: defaultSelections(state.outputs.length),
+          labelT: 0.5,
         });
         selectedArrowId = newId;
         renderDiagram();
@@ -510,9 +671,11 @@ function attachEvents() {
   });
 
   diagram.addEventListener('contextmenu', (e) => {
+    const handle = e.target.closest('.arc-handle, .label-handle');
     const path = e.target.closest('path.arrow-path');
-    if (path) {
-      const id = parseInt(path.dataset.id, 10);
+    const target = handle || path;
+    if (target) {
+      const id = parseInt(target.dataset.id || target.getAttribute('data-id'), 10);
       openArrowDialog(id);
     }
   });
@@ -520,18 +683,34 @@ function attachEvents() {
   document.getElementById('saveArrow').addEventListener('click', () => {
     const tr = state.transitions.find((t) => t.id === arrowDialogTarget);
     if (tr) {
-      tr.inputs = document.getElementById('arrowInputs').value.trim();
-      tr.outputs = document.getElementById('arrowOutputs').value.trim();
+      tr.inputValues = readChoices(inputChoices, state.inputs, 'input');
+      tr.outputValues = state.type === 'mealy' ? readChoices(outputChoices, state.outputs, 'output') : [];
+      tr.inputs = selectionLabel(state.inputs, tr.inputValues);
+      tr.outputs = state.type === 'mealy' ? selectionLabel(state.outputs, tr.outputValues) : '';
       renderDiagram();
     }
     closeDialog('arrowDialog');
   });
 
   document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Backspace' || e.key === 'Delete') && selectedArrowId) {
-      state.transitions = state.transitions.filter((t) => t.id !== selectedArrowId);
+    const isFormElement = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+    if (!isFormElement && (e.key === 'Backspace' || e.key === 'Delete') && selectedArrowId) {
+      const idx = state.transitions.findIndex((t) => t.id === selectedArrowId);
+      if (idx !== -1) {
+        const [removed] = state.transitions.splice(idx, 1);
+        if (removed) deletedTransitions.push(removed);
+      }
       selectedArrowId = null;
       renderDiagram();
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      const restored = deletedTransitions.pop();
+      if (restored) {
+        state.transitions.push(restored);
+        selectedArrowId = restored.id;
+        renderDiagram();
+      }
     }
   });
 
