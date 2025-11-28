@@ -8,6 +8,7 @@
   --surface: #ffffff;
   --state: #c4d5ff;
   --warning: #ffd9a0;
+  --error: #f28b82;
 }
 
 body.dark {
@@ -20,6 +21,7 @@ body.dark {
   --surface: #0b1221;
   --state: #1f3a60;
   --warning: #78531e;
+  --error: #fca5a5;
 }
 
 * {
@@ -70,6 +72,11 @@ body {
   min-height: 0;
 }
 
+.table-panel-wrapper {
+  position: relative;
+  padding-bottom: 14px;
+}
+
 .state-palette {
   border-right: 1px solid var(--border);
   background: var(--surface);
@@ -89,6 +96,15 @@ body {
   overflow: hidden;
 }
 
+.version-label {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  font-weight: 700;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 #diagram {
   width: 100%;
   height: 100%;
@@ -99,7 +115,6 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   max-height: 420px;
-  transition: max-height 0.3s ease;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -120,6 +135,26 @@ body {
 .table-wrapper {
   padding: 0 1rem 1rem;
   overflow: auto;
+  max-height: 320px;
+}
+
+.table-toggle {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.25);
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+  z-index: 5;
+}
+
+.table-toggle:hover {
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.25), 0 0 0 1px var(--border), 0 0 12px rgba(74,108,247,0.45);
+}
+
+.table-toggle:active {
+  transform: translateX(-50%);
 }
 
 .table-wrapper table {
@@ -288,6 +323,10 @@ svg text {
   fill: var(--warning);
 }
 
+.state-node.overfull {
+  fill: var(--error);
+}
+
 .state-label-text {
   font-weight: 700;
 }
@@ -298,6 +337,11 @@ svg text {
   stroke-width: 2px;
   marker-end: url(#arrowhead);
   cursor: pointer;
+}
+
+.arrow-path.self-loop {
+  stroke-width: 2.4px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));
 }
 
 .arrow-path.selected {
@@ -326,6 +370,19 @@ svg text {
   font-size: 12px;
   font-weight: 600;
   pointer-events: none;
+}
+
+.subscript {
+  font-size: 0.8em;
+  baseline-shift: sub;
+}
+
+.overline {
+  text-decoration: overline;
+}
+
+.divider {
+  font-weight: 700;
 }
 
 .io-grid {

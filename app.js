@@ -6,6 +6,7 @@ const state = {
   outputs: [],
   states: [],
   transitions: [],
+  showBinary: true,
 };
 
 let currentArrow = null;
@@ -13,16 +14,21 @@ let selectedArrowId = null;
 let arrowDialogTarget = null;
 let previewPath = null;
 let deletedTransitions = [];
+let viewState = { scale: 1, panX: 0, panY: 0 };
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
 const arrowDialog = document.getElementById('arrowDialog');
 const quickRefDialog = document.getElementById('quickRefDialog');
 const diagram = document.getElementById('diagram');
+const viewport = document.getElementById('viewport');
 const paletteList = document.getElementById('paletteList');
 const palettePane = document.querySelector('.state-palette');
 const stateTableBody = document.querySelector('#stateTable tbody');
 const toggleTableBtn = document.getElementById('toggleTable');
+const toggleIoModeBtn = document.getElementById('toggleIoMode');
 const tablePanel = document.getElementById('tablePanel');
 const toolbarTitle = document.getElementById('toolbarTitle');
 const mealyOutputRow = document.getElementById('mealyOutputRow');
@@ -37,11 +43,15 @@ function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
-function parseList(value) {
-  return value
-    .split(',')
+function normalizeNames(list) {
+  return list
     .map((v) => v.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((v) => (v ? v[0].toUpperCase() + v.slice(1) : v));
+}
+
+function parseList(value) {
+  return normalizeNames(value.split(','));
 }
 
 function defaultSelections(count, fallbackText = '') {
@@ -66,6 +76,84 @@ function selectionLabel(names, values) {
     .join(', ');
 }
 
+function escapeHtml(str) {
+  return str.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+}
+
+function nameToSvg(name) {
+  let result = '';
+  let i = 0;
+  while (i < name.length) {
+    const idx = name.indexOf('_', i);
+    if (idx === -1) {
+      result += escapeHtml(name.slice(i));
+      break;
+    }
+    result += escapeHtml(name.slice(i, idx));
+    let j = idx + 1;
+    while (j < name.length && /[A-Za-z0-9]/.test(name[j])) j += 1;
+    const sub = name.slice(idx + 1, j);
+    if (sub) {
+      result += `<tspan class="subscript">${escapeHtml(sub)}</tspan>`;
+    } else {
+      result += '_';
+    }
+    i = j;
+  }
+  return result || escapeHtml(name);
+}
+
+function variableToken(name, val) {
+  const parts = name.split('_');
+  const base = escapeHtml(parts.shift() || name);
+  const sub = parts.length ? `<tspan class="subscript">${escapeHtml(parts.join('_'))}</tspan>` : '';
+  if (val === 'X') return 'X';
+  if (val === '0') return `<tspan class="overline">${base}</tspan>${sub}`;
+  return `${base}${sub}`;
+}
+
+function buildPlainIOText(names, values, mode = 'binary') {
+  if (mode === 'binary' || !names.length) {
+    return (values || []).map((v) => v || 'X').join('');
+  }
+  return names
+    .map((name, idx) => {
+      const val = (values && values[idx]) || 'X';
+      if (val === 'X') return 'X';
+      return `${name}${val === '0' ? "'" : ''}`;
+    })
+    .join('');
+}
+
+function buildIOText(names, values, mode = 'binary') {
+  if (mode === 'binary' || !names.length) {
+    return escapeHtml((values || []).map((v) => v || 'X').join(''));
+  }
+  return names
+    .map((name, idx) => variableToken(name, (values && values[idx]) || 'X'))
+    .join('');
+}
+
+function transitionLabel(tr) {
+  const mode = state.showBinary ? 'binary' : 'vars';
+  const inputPlain = buildPlainIOText(state.inputs, tr.inputValues, mode);
+  const outputPlain =
+    state.type === 'mealy' ? buildPlainIOText(state.outputs, tr.outputValues, mode) : '';
+  const parts = [];
+  const htmlParts = [];
+  if (inputPlain) {
+    parts.push(inputPlain);
+    htmlParts.push(buildIOText(state.inputs, tr.inputValues, mode));
+  }
+  if (outputPlain) {
+    parts.push(outputPlain);
+    htmlParts.push(buildIOText(state.outputs, tr.outputValues, mode));
+  }
+  const labelPlain = parts.join(' | ');
+  const labelHtml = htmlParts.join(' <tspan class="divider">|</tspan> ') || 'Set I/O';
+  return { labelPlain, labelHtml };
+}
+
 function normalizeTransition(tr) {
   if (!Array.isArray(tr.inputValues)) {
     tr.inputValues = defaultSelections(state.inputs.length, tr.inputs || '');
@@ -79,7 +167,9 @@ function normalizeTransition(tr) {
     tr.outputValues = (tr.outputValues || []).slice(0, state.outputs.length);
     while (tr.outputValues.length < state.outputs.length) tr.outputValues.push('X');
   }
-  tr.labelT = tr.labelT === undefined ? 0.5 : tr.labelT;
+  tr.labelT = tr.labelT === undefined ? 0.12 : tr.labelT;
+  if (tr.arcOffset === undefined || Number.isNaN(tr.arcOffset)) tr.arcOffset = 0;
+  if (tr.from === tr.to && tr.loopAngle === undefined) tr.loopAngle = -Math.PI / 2;
 }
 
 function initStates() {
@@ -113,6 +203,8 @@ function updateControls() {
   document.querySelectorAll('.moore-only').forEach((el) => {
     el.classList.toggle('hidden', state.type !== 'moore');
   });
+  toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
+  toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
 }
 
 function renderPalette() {
@@ -124,7 +216,10 @@ function renderPalette() {
     node.dataset.id = st.id;
     node.querySelector('.state-circle').textContent = st.id;
     node.querySelector('.state-label').textContent = st.label;
-    node.querySelector('.state-extra').textContent = state.type === 'moore' ? st.outputs.join('') : '';
+    node.querySelector('.state-extra').innerHTML =
+      state.type === 'moore'
+        ? buildIOText(state.outputs, st.outputs, state.showBinary ? 'binary' : 'vars')
+        : '';
     paletteList.appendChild(node);
   });
 }
@@ -145,13 +240,8 @@ function renderTable() {
 }
 
 function clearDiagram() {
-  diagram.innerHTML = '';
-  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-  defs.innerHTML = `
-    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
-      <polygon points="0 0, 10 3.5, 0 7" fill="currentColor"></polygon>
-    </marker>`;
-  diagram.appendChild(defs);
+  viewport.innerHTML = '';
+  previewPath = null;
 }
 
 function renderDiagram() {
@@ -175,9 +265,10 @@ function drawState(st) {
   circle.setAttribute('cy', st.y);
   circle.setAttribute('r', st.radius);
   circle.classList.add('state-node');
-  const expectedTransitions = state.inputs.length ? Math.pow(2, state.inputs.length) : 0;
-  const actualTransitions = state.transitions.filter((t) => t.from === st.id).length;
-  if (expectedTransitions && actualTransitions !== expectedTransitions) {
+  const coverage = evaluateCoverage(st.id);
+  if (coverage.overfull) {
+    circle.classList.add('overfull');
+  } else if (coverage.missing) {
     circle.classList.add('missing');
   }
 
@@ -192,31 +283,84 @@ function drawState(st) {
   textId.setAttribute('x', st.x);
   textId.setAttribute('y', st.y + 12);
   textId.setAttribute('text-anchor', 'middle');
-  textId.textContent = state.type === 'moore' ? st.outputs.join('') : `#${st.id}`;
+  if (state.type === 'moore') {
+    textId.innerHTML = buildIOText(state.outputs, st.outputs, state.showBinary ? 'binary' : 'vars');
+  } else {
+    textId.textContent = `#${st.id}`;
+  }
 
   group.appendChild(circle);
   group.appendChild(textLabel);
   group.appendChild(textId);
-  diagram.appendChild(group);
+  viewport.appendChild(group);
 }
 
-function endpointsForArc(from, to) {
+function combinationsFromValues(values) {
+  let combos = [''];
+  values.forEach((val) => {
+    const next = [];
+    const normalized = val === '0' || val === '1' ? val : 'X';
+    combos.forEach((prefix) => {
+      if (normalized === 'X') {
+        next.push(`${prefix}0`, `${prefix}1`);
+      } else {
+        next.push(`${prefix}${normalized}`);
+      }
+    });
+    combos = next;
+  });
+  return combos;
+}
+
+function evaluateCoverage(stateId) {
+  const expected = Math.pow(2, state.inputs.length || 0);
+  if (!expected) return { missing: false, overfull: false };
+
+  const comboCounts = new Map();
+  state.transitions
+    .filter((t) => t.from === stateId)
+    .forEach((tr) => {
+      normalizeTransition(tr);
+      combinationsFromValues(tr.inputValues).forEach((combo) => {
+        comboCounts.set(combo, (comboCounts.get(combo) || 0) + 1);
+      });
+    });
+
+  const uniqueCombos = comboCounts.size;
+  const hasDuplicates = Array.from(comboCounts.values()).some((count) => count > 1);
+  const missing = uniqueCombos < expected;
+  const overfull = hasDuplicates || uniqueCombos > expected;
+  return { missing, overfull };
+}
+
+function endpointsForArc(from, to, arcOffset = 0) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const baseAngle = Math.atan2(dy, dx);
+  const maxShift = (2 * Math.PI) / 3;
+  const normalized = Math.max(-1, Math.min(1, arcOffset / (len / 2 || 1)));
+  const angleShift = normalized * maxShift;
+
+  const startAngle = baseAngle + angleShift;
+  const endAngle = baseAngle + Math.PI - angleShift;
+
   const start = {
-    x: from.x + (dx / len) * from.radius,
-    y: from.y + (dy / len) * from.radius,
+    x: from.x + Math.cos(startAngle) * from.radius,
+    y: from.y + Math.sin(startAngle) * from.radius,
   };
   const end = {
-    x: to.x - (dx / len) * to.radius,
-    y: to.y - (dy / len) * to.radius,
+    x: to.x + Math.cos(endAngle) * to.radius,
+    y: to.y + Math.sin(endAngle) * to.radius,
   };
-  return { start, end, len, dx, dy };
+  const chordDx = end.x - start.x;
+  const chordDy = end.y - start.y;
+  const chordLen = Math.sqrt(chordDx * chordDx + chordDy * chordDy) || 1;
+  return { start, end, len: chordLen, dx: chordDx, dy: chordDy };
 }
 
 function quadraticPath(from, to, arcOffset = 0) {
-  const { start, end, len, dx, dy } = endpointsForArc(from, to);
+  const { start, end, len, dx, dy } = endpointsForArc(from, to, arcOffset);
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2;
   const nx = -dy / len;
@@ -226,19 +370,45 @@ function quadraticPath(from, to, arcOffset = 0) {
   return { d: `M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`, ctrl: { x: cx, y: cy } };
 }
 
+function selfLoopPath(node, tr) {
+  const angle = tr.loopAngle !== undefined ? tr.loopAngle : -Math.PI / 2;
+  const sweep = Math.PI / 1.8;
+  const startAngle = angle - sweep / 2;
+  const endAngle = angle + sweep / 2;
+  const loopDepth = Math.min(120, Math.max(30, (tr.arcOffset || 0) + 40));
+  const ctrlRadius = loopDepth + 24;
+
+  const start = {
+    x: node.x + Math.cos(startAngle) * node.radius,
+    y: node.y + Math.sin(startAngle) * node.radius,
+  };
+  const end = {
+    x: node.x + Math.cos(endAngle) * node.radius,
+    y: node.y + Math.sin(endAngle) * node.radius,
+  };
+  const ctrl = {
+    x: node.x + Math.cos(angle) * (node.radius + ctrlRadius),
+    y: node.y + Math.sin(angle) * (node.radius + ctrlRadius),
+  };
+
+  return { d: `M ${start.x} ${start.y} Q ${ctrl.x} ${ctrl.y} ${end.x} ${end.y}`, ctrl };
+}
+
 function drawTransition(tr) {
   normalizeTransition(tr);
   const from = state.states.find((s) => s.id === tr.from);
   const to = state.states.find((s) => s.id === tr.to);
   if (!from || !to) return;
-  const pathInfo = quadraticPath(from, to, tr.arcOffset || 0);
+  const isSelfLoop = from.id === to.id;
+  const pathInfo = isSelfLoop ? selfLoopPath(from, tr) : quadraticPath(from, to, tr.arcOffset || 0);
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', pathInfo.d);
   path.classList.add('arrow-path');
+  if (isSelfLoop) path.classList.add('self-loop');
   if (selectedArrowId === tr.id) path.classList.add('selected');
   path.dataset.id = tr.id;
 
-  diagram.appendChild(path);
+  viewport.appendChild(path);
 
   const totalLength = path.getTotalLength();
   const midPoint = path.getPointAtLength(totalLength / 2);
@@ -257,13 +427,8 @@ function drawTransition(tr) {
   labelGroup.dataset.id = tr.id;
   labelGroup.setAttribute('transform', `translate(${labelPoint.x} ${labelPoint.y})`);
 
-  const labelText = [];
-  labelText.push(selectionLabel(state.inputs, tr.inputValues));
-  if (state.type === 'mealy' && state.outputs.length) {
-    labelText.push(selectionLabel(state.outputs, tr.outputValues));
-  }
-  const labelString = labelText.filter(Boolean).join(' | ') || 'Set I/O';
-  const labelWidth = Math.max(46, labelString.length * 7 + 12);
+  const { labelPlain, labelHtml } = transitionLabel(tr);
+  const labelWidth = Math.max(46, (labelPlain.length || 4) * 7 + 12);
 
   const labelRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   labelRect.setAttribute('x', -labelWidth / 2);
@@ -274,13 +439,13 @@ function drawTransition(tr) {
   const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   label.setAttribute('text-anchor', 'middle');
   label.setAttribute('y', 2);
-  label.textContent = labelString;
+  label.innerHTML = labelHtml;
 
   labelGroup.appendChild(labelRect);
   labelGroup.appendChild(label);
 
-  diagram.appendChild(handle);
-  diagram.appendChild(labelGroup);
+  viewport.appendChild(handle);
+  viewport.appendChild(labelGroup);
 }
 
 function drawPreview() {
@@ -295,11 +460,7 @@ function drawPreview() {
     previewPath.setAttribute('stroke-dasharray', '6 4');
   }
   previewPath.setAttribute('d', pathInfo.d);
-  diagram.appendChild(previewPath);
-}
-
-function formatIO(text) {
-  return text.replace(/_([A-Za-z0-9]+)/g, '<tspan baseline-shift="sub">$1</tspan>');
+  viewport.appendChild(previewPath);
 }
 
 function buildChoiceRow(container, name, index, currentValue, prefix) {
@@ -368,7 +529,13 @@ function saveState() {
 }
 
 function loadState(data) {
+  const savedShowBinary = data.showBinary;
   Object.assign(state, data);
+  state.inputs = normalizeNames(state.inputs || []);
+  state.outputs = normalizeNames(state.outputs || []);
+  state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
+  viewState = { scale: 1, panX: 0, panY: 0 };
+  applyViewTransform();
   updateControls();
   renderTable();
   renderPalette();
@@ -380,6 +547,13 @@ function captureImage(element, filename) {
     const url = canvas.toDataURL('image/png');
     download(filename, url);
   });
+}
+
+function applyViewTransform() {
+  viewport.setAttribute(
+    'transform',
+    `translate(${viewState.panX} ${viewState.panY}) scale(${viewState.scale})`
+  );
 }
 
 function withPrevent(fn) {
@@ -420,6 +594,8 @@ function attachEvents() {
     state.numStates = Math.min(32, Math.max(1, parseInt(document.getElementById('stateCount').value, 10) || 1));
     state.inputs = parseList(document.getElementById('inputVars').value);
     state.outputs = parseList(document.getElementById('outputVars').value);
+    viewState = { scale: 1, panX: 0, panY: 0 };
+    applyViewTransform();
     initStates();
     updateControls();
     renderTable();
@@ -458,6 +634,14 @@ function attachEvents() {
 
   toggleTableBtn.addEventListener('click', () => {
     tablePanel.classList.toggle('collapsed');
+    toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
+  });
+
+  toggleIoModeBtn.addEventListener('click', () => {
+    state.showBinary = !state.showBinary;
+    toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
+    renderPalette();
+    renderDiagram();
   });
 
   document.getElementById('toggleTheme').addEventListener('click', () => {
@@ -546,7 +730,25 @@ function attachEvents() {
     renderDiagram();
   });
 
+  diagram.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const point = getSVGPoint(e.clientX, e.clientY);
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newScale = Math.min(3, Math.max(0.4, viewState.scale * factor));
+    const scaleFactor = newScale / viewState.scale;
+    viewState.panX = point.x - (point.x - viewState.panX) * scaleFactor;
+    viewState.panY = point.y - (point.y - viewState.panY) * scaleFactor;
+    viewState.scale = newScale;
+    applyViewTransform();
+  });
+
   diagram.addEventListener('mousedown', (e) => {
+    if (e.button === 1) {
+      isPanning = true;
+      panStart = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      return;
+    }
     const targetLabelHandle = e.target.closest('.label-handle');
     const targetState = e.target.closest('circle.state-node');
     const targetHandle = e.target.closest('circle.arc-handle');
@@ -585,6 +787,13 @@ function attachEvents() {
         const from = state.states.find((s) => s.id === tr.from);
         const to = state.states.find((s) => s.id === tr.to);
         const pt = getSVGPoint(ev.clientX, ev.clientY);
+        if (from && to && from.id === to.id) {
+          tr.loopAngle = Math.atan2(pt.y - from.y, pt.x - from.x);
+          const radial = Math.max(0, Math.hypot(pt.x - from.x, pt.y - from.y) - from.radius);
+          tr.arcOffset = radial;
+          renderDiagram();
+          return;
+        }
         const midX = (from.x + to.x) / 2;
         const midY = (from.y + to.y) / 2;
         const dx = to.x - from.x;
@@ -646,25 +855,30 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mouseup', (e) => {
-    if (currentArrow && e.button === 0) {
+    if (currentArrow && e.button === 2) {
       const targetState = e.target.closest('circle.state-node');
       if (targetState) {
         const toId = parseInt(targetState.parentNode.dataset.id, 10);
         const newId = Date.now();
+        const isSelfLoop = toId === currentArrow.from;
         state.transitions.push({
           id: newId,
           from: currentArrow.from,
           to: toId,
           inputs: '',
           outputs: '',
-          arcOffset: 0,
+          arcOffset: isSelfLoop ? 30 : 0,
+          loopAngle: isSelfLoop ? -Math.PI / 2 : undefined,
           inputValues: defaultSelections(state.inputs.length),
           outputValues: defaultSelections(state.outputs.length),
-          labelT: 0.5,
+          labelT: 0.12,
         });
         selectedArrowId = newId;
         renderDiagram();
       }
+    }
+    if (previewPath && previewPath.parentNode) {
+      previewPath.parentNode.removeChild(previewPath);
     }
     currentArrow = null;
     previewPath = null;
@@ -721,8 +935,32 @@ function attachEvents() {
   });
 
   document.addEventListener('mousemove', (e) => {
+    if (isPanning) {
+      const dx = (e.clientX - panStart.x) / viewState.scale;
+      const dy = (e.clientY - panStart.y) / viewState.scale;
+      viewState.panX += dx;
+      viewState.panY += dy;
+      panStart = { x: e.clientX, y: e.clientY };
+      applyViewTransform();
+      return;
+    }
     if (currentArrow) {
       currentArrow.toPoint = getSVGPoint(e.clientX, e.clientY);
+      renderDiagram();
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 1 && isPanning) {
+      isPanning = false;
+      return;
+    }
+    if (e.button === 2 && currentArrow) {
+      if (previewPath && previewPath.parentNode) {
+        previewPath.parentNode.removeChild(previewPath);
+      }
+      currentArrow = null;
+      previewPath = null;
       renderDiagram();
     }
   });
@@ -732,7 +970,8 @@ function getSVGPoint(clientX, clientY) {
   const pt = diagram.createSVGPoint();
   pt.x = clientX;
   pt.y = clientY;
-  const svgP = pt.matrixTransform(diagram.getScreenCTM().inverse());
+  const target = viewport || diagram;
+  const svgP = pt.matrixTransform(target.getScreenCTM().inverse());
   return svgP;
 }
 
@@ -742,5 +981,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initStates();
   renderTable();
   renderPalette();
+  applyViewTransform();
   renderDiagram();
 });
