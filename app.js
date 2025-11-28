@@ -564,7 +564,9 @@ function captureImage(element, filename) {
     cleanups.push(() => element.classList.add('collapsed'));
   }
 
-  const themeBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  const themeBg =
+    getComputedStyle(document.body).getPropertyValue('--bg').trim() ||
+    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
   const captureBg = document.body.classList.contains('dark') ? themeBg || '#0b1221' : '#ffffff';
   tempStyle(element, { background: captureBg, backgroundImage: 'none' });
   tempStyle(element, { boxShadow: 'none' });
