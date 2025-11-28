@@ -564,10 +564,15 @@ function captureImage(element, filename) {
     cleanups.push(() => element.classList.add('collapsed'));
   }
 
-  const isLight = document.body.classList.contains('light');
-  if (isLight) {
-    tempStyle(element, { background: '#ffffff', backgroundImage: 'none' });
-  }
+  const captureBg = '#ffffff';
+  tempStyle(element, { background: captureBg, backgroundImage: 'none' });
+  tempStyle(element, { boxShadow: 'none' });
+
+  const shadowedNodes = Array.from(element.querySelectorAll('*')).filter((node) => {
+    const shadow = getComputedStyle(node).boxShadow;
+    return shadow && shadow !== 'none';
+  });
+  shadowedNodes.forEach((node) => tempStyle(node, { boxShadow: 'none' }));
 
   tempStyle(element, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
   const scrollableChild = element.querySelector('.table-wrapper');
@@ -581,7 +586,7 @@ function captureImage(element, filename) {
   const scale = Math.min(1, maxDimension / Math.max(width, height, 1));
 
   html2canvas(element, {
-    backgroundColor: isLight ? '#ffffff' : null,
+    backgroundColor: captureBg,
     width,
     height,
     windowWidth: width,
