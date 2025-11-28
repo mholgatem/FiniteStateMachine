@@ -74,7 +74,6 @@ body {
 
 .table-panel-wrapper {
   position: relative;
-  padding-bottom: 38px;
 }
 
 .state-palette {
@@ -222,7 +221,7 @@ button.ghost {
 }
 
 button.icon-btn {
-  width: 36px;
+  width: 100px;
   height: 36px;
   border-radius: 8px;
 }
