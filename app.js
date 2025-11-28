@@ -564,6 +564,11 @@ function captureImage(element, filename) {
     cleanups.push(() => element.classList.add('collapsed'));
   }
 
+  const isLight = document.body.classList.contains('light');
+  if (isLight) {
+    tempStyle(element, { background: '#ffffff', backgroundImage: 'none' });
+  }
+
   tempStyle(element, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
   const scrollableChild = element.querySelector('.table-wrapper');
   if (scrollableChild) {
@@ -576,7 +581,7 @@ function captureImage(element, filename) {
   const scale = Math.min(1, maxDimension / Math.max(width, height, 1));
 
   html2canvas(element, {
-    backgroundColor: null,
+    backgroundColor: isLight ? '#ffffff' : null,
     width,
     height,
     windowWidth: width,
