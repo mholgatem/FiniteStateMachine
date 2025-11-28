@@ -543,10 +543,55 @@ function loadState(data) {
 }
 
 function captureImage(element, filename) {
-  html2canvas(element).then((canvas) => {
-    const url = canvas.toDataURL('image/png');
-    download(filename, url);
-  });
+  if (!element) return;
+
+  const cleanups = [];
+  const tempStyle = (el, styles) => {
+    const prev = {};
+    Object.entries(styles).forEach(([key, value]) => {
+      prev[key] = el.style[key];
+      el.style[key] = value;
+    });
+    cleanups.push(() => {
+      Object.entries(prev).forEach(([key, value]) => {
+        el.style[key] = value;
+      });
+    });
+  };
+
+  if (element.classList?.contains('collapsed')) {
+    element.classList.remove('collapsed');
+    cleanups.push(() => element.classList.add('collapsed'));
+  }
+
+  tempStyle(element, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
+  const scrollableChild = element.querySelector('.table-wrapper');
+  if (scrollableChild) {
+    tempStyle(scrollableChild, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
+  }
+
+  const width = element.scrollWidth || element.clientWidth || 0;
+  const height = element.scrollHeight || element.clientHeight || 0;
+  const maxDimension = 2500;
+  const scale = Math.min(1, maxDimension / Math.max(width, height, 1));
+
+  html2canvas(element, {
+    backgroundColor: null,
+    width,
+    height,
+    windowWidth: width,
+    windowHeight: height,
+    scale,
+    scrollX: 0,
+    scrollY: -window.scrollY,
+  })
+    .then((canvas) => {
+      const url = canvas.toDataURL('image/png');
+      download(filename, url);
+    })
+    .finally(() => {
+      cleanups.reverse().forEach((fn) => fn());
+    });
 }
 
 function applyViewTransform() {
