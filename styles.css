@@ -193,6 +193,26 @@ body {
   text-align: center;
 }
 
+.col-spacer {
+  width: 10px;
+  min-width: 10px;
+  border: none !important;
+  background: transparent !important;
+  padding: 0;
+}
+
+.row-spacer td {
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+}
+
+.row-index-cell {
+  width: 48px;
+  font-weight: 700;
+  background: var(--surface-alt);
+}
+
 .transition-row-label {
   font-weight: 600;
   white-space: nowrap;

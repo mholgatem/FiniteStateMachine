@@ -20,6 +20,8 @@ let unsavedChanges = false;
 let drawerWidth = 520;
 let isPanning = false;
 let panStart = { x: 0, y: 0 };
+let transitionTableValueColumns = [];
+let transitionTableGroupSize = 0;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -319,25 +321,40 @@ function ensureTransitionTableStructure() {
   const bitCount = stateBitCount();
   const stateBitCols = [];
   for (let i = bitCount - 1; i >= 0; i -= 1) {
-    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}` });
+    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}`, type: 'value' });
   }
 
   const nextStateBitCols = [];
   for (let i = bitCount - 1; i >= 0; i -= 1) {
-    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q_${i}^+` });
+    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q_${i}^+`, type: 'value' });
   }
 
   const inputCols = state.inputs.map((name, idx) => ({
     key: `in_${idx}`,
     label: name || `Input ${idx + 1}`,
+    type: 'value',
   }));
   const outputCols = state.outputs.map((name, idx) => ({
     key: `out_${idx}`,
     label: name || `Output ${idx + 1}`,
+    type: 'value',
   }));
 
-  const columns = [...stateBitCols, ...inputCols, ...nextStateBitCols, ...outputCols];
+  const columns = [
+    { key: 'row_index', label: '#', type: 'rowIndex' },
+    { key: 'spacer_0', label: '', type: 'spacer' },
+    ...stateBitCols,
+    ...inputCols,
+    { key: 'spacer_1', label: '', type: 'spacer' },
+    ...nextStateBitCols,
+    { key: 'spacer_2', label: '', type: 'spacer' },
+    ...outputCols,
+  ];
+
+  transitionTableValueColumns = columns.filter((col) => col.type === 'value');
+
   const combos = generateInputCombos(state.inputs.length);
+  transitionTableGroupSize = combos.length || 1;
   const rows = [];
   for (let s = 0; s < state.numStates; s += 1) {
     combos.forEach((combo) => {
@@ -347,7 +364,7 @@ function ensureTransitionTableStructure() {
 
   const validCells = new Set();
   rows.forEach((row) => {
-    columns.forEach((col) => validCells.add(`${row.key}::${col.key}`));
+    transitionTableValueColumns.forEach((col) => validCells.add(`${row.key}::${col.key}`));
   });
 
   Object.keys(state.transitionTable.cells).forEach((key) => {
@@ -359,6 +376,8 @@ function ensureTransitionTableStructure() {
 
   state.transitionTable.columns = columns;
   state.transitionTable.rows = rows;
+  state.transitionTable.valueColumns = transitionTableValueColumns;
+  state.transitionTable.groupSize = transitionTableGroupSize;
 }
 
 function hasTransitionTableValues() {
@@ -377,27 +396,60 @@ function renderTransitionTable() {
   transitionTableBody.innerHTML = '';
 
   const headerRow = document.createElement('tr');
+  const valueIndexMap = new Map(
+    transitionTableValueColumns.map((col, idx) => [col.key, idx]),
+  );
   state.transitionTable.columns.forEach((col) => {
     const th = document.createElement('th');
     th.innerHTML = formatScriptedText(col.label);
+    if (col.type === 'spacer') th.classList.add('col-spacer');
+    if (col.type === 'rowIndex') th.classList.add('row-index-cell');
     headerRow.appendChild(th);
   });
   transitionTableHead.appendChild(headerRow);
 
-  state.transitionTable.rows.forEach((row) => {
+  state.transitionTable.rows.forEach((row, rowIdx) => {
     const tr = document.createElement('tr');
+    tr.dataset.rowIndex = rowIdx;
+
     state.transitionTable.columns.forEach((col) => {
       const td = document.createElement('td');
+      if (col.type === 'spacer') {
+        td.classList.add('col-spacer');
+        tr.appendChild(td);
+        return;
+      }
+      if (col.type === 'rowIndex') {
+        td.textContent = rowIdx + 1;
+        td.classList.add('row-index-cell');
+        tr.appendChild(td);
+        return;
+      }
       const input = document.createElement('input');
       input.type = 'text';
       input.dataset.rowKey = row.key;
       input.dataset.colKey = col.key;
+      input.dataset.rowIndex = rowIdx;
+      input.dataset.valueColIndex = valueIndexMap.get(col.key);
       input.value = state.transitionTable.cells[`${row.key}::${col.key}`] || '';
       td.appendChild(input);
       tr.appendChild(td);
     });
 
     transitionTableBody.appendChild(tr);
+
+    if (
+      transitionTableGroupSize > 0 &&
+      (rowIdx + 1) % transitionTableGroupSize === 0 &&
+      rowIdx < state.transitionTable.rows.length - 1
+    ) {
+      const spacerRow = document.createElement('tr');
+      spacerRow.classList.add('row-spacer');
+      const spacerCell = document.createElement('td');
+      spacerCell.colSpan = state.transitionTable.columns.length;
+      spacerRow.appendChild(spacerCell);
+      transitionTableBody.appendChild(spacerRow);
+    }
   });
 }
 
@@ -1063,9 +1115,46 @@ function attachEvents() {
     const rowKey = target.dataset.rowKey;
     const colKey = target.dataset.colKey;
     if (!rowKey || !colKey) return;
+    let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+    if (val.length > 1) val = val[0];
+    target.value = val;
     if (!state.transitionTable || !state.transitionTable.cells) state.transitionTable = { cells: {} };
-    state.transitionTable.cells[`${rowKey}::${colKey}`] = target.value;
+    state.transitionTable.cells[`${rowKey}::${colKey}`] = val;
     markDirty();
+  });
+
+  transitionTableBody.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT') {
+      e.target.select();
+    }
+  });
+
+  transitionTableBody.addEventListener('keydown', (e) => {
+    const target = e.target;
+    if (target.tagName !== 'INPUT') return;
+    const { key } = e;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+    const rowIdx = parseInt(target.dataset.rowIndex, 10);
+    const colIdx = parseInt(target.dataset.valueColIndex, 10);
+    if (Number.isNaN(rowIdx) || Number.isNaN(colIdx)) return;
+    const totalRows = (state.transitionTable?.rows || []).length;
+    const totalCols = transitionTableValueColumns.length;
+    if (!totalRows || !totalCols) return;
+
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+    if (key === 'ArrowLeft') nextCol = Math.max(0, colIdx - 1);
+    if (key === 'ArrowRight') nextCol = Math.min(totalCols - 1, colIdx + 1);
+    if (key === 'ArrowUp') nextRow = Math.max(0, rowIdx - 1);
+    if (key === 'ArrowDown') nextRow = Math.min(totalRows - 1, rowIdx + 1);
+
+    const selector = `input[data-row-index="${nextRow}"][data-value-col-index="${nextCol}"]`;
+    const nextInput = transitionTableBody.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+      e.preventDefault();
+    }
   });
 
   paletteList.addEventListener('dragstart', (e) => {
