@@ -108,7 +108,7 @@ body.drawer-open {
 }
 
 body.drawer-open .workspace {
-  grid-template-columns: 12% calc(100% - 12% - var(--drawer-width));
+  grid-template-columns: 12% 1fr;
 }
 
 .state-palette.collapsed {
