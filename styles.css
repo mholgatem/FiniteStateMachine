@@ -9,6 +9,8 @@
   --state: #c4d5ff;
   --warning: #ffd9a0;
   --error: #f28b82;
+  --drawer-width: 520px;
+  --drawer-gap: 0px;
 }
 
 body.dark {
@@ -97,6 +99,16 @@ body {
   grid-template-columns: 12% 1fr;
   flex: 1;
   min-height: 0;
+  width: calc(100vw - var(--drawer-gap));
+  transition: width 0.2s ease;
+}
+
+body.drawer-open {
+  --drawer-gap: var(--drawer-width);
+}
+
+body.drawer-open .workspace {
+  grid-template-columns: 12% calc(100% - 12% - var(--drawer-width));
 }
 
 .state-palette.collapsed {
@@ -107,7 +119,9 @@ body {
   position: fixed;
   top: 64px;
   right: 0;
-  width: min(520px, 48vw);
+  width: var(--drawer-width);
+  min-width: 320px;
+  max-width: 85vw;
   height: calc(100% - 64px);
   background: var(--surface);
   border-left: 1px solid var(--border);
@@ -139,6 +153,27 @@ body {
   flex-direction: column;
 }
 
+.drawer-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  width: 12px;
+  height: 100%;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 13;
+}
+
+.drawer-resize-handle::after {
+  content: '';
+  width: 4px;
+  height: 32px;
+  background: var(--border);
+  border-radius: 999px;
+}
+
 .drawer-table-wrapper {
   padding: 1rem;
   overflow: auto;
@@ -163,13 +198,23 @@ body {
 }
 
 #transitionTable td input {
-  width: 100%;
+  width: 30px;
   text-align: center;
 }
 
 .transition-row-label {
   font-weight: 600;
   white-space: nowrap;
+}
+
+.subscript-text {
+  vertical-align: sub;
+  font-size: 0.82em;
+}
+
+.superscript-text {
+  vertical-align: super;
+  font-size: 0.82em;
 }
 
 .table-panel-wrapper {
