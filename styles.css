@@ -99,12 +99,10 @@ body {
   grid-template-columns: 12% 1fr;
   flex: 1;
   min-height: 0;
-  width: calc(100vw - var(--drawer-gap));
-  transition: width 0.2s ease;
+  width: 100vw;
 }
 
 body.drawer-open {
-  --drawer-gap: var(--drawer-width);
 }
 
 body.drawer-open .workspace {
