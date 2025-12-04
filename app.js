@@ -7,6 +7,7 @@ const state = {
   states: [],
   transitions: [],
   showBinary: true,
+  transitionTable: { cells: {} },
 };
 
 let currentArrow = null;
@@ -34,6 +35,11 @@ const toolbarTitle = document.getElementById('toolbarTitle');
 const mealyOutputRow = document.getElementById('mealyOutputRow');
 const inputChoices = document.getElementById('inputChoices');
 const outputChoices = document.getElementById('outputChoices');
+const transitionDrawer = document.getElementById('transitionDrawer');
+const transitionTableHead = document.getElementById('transitionTableHead');
+const transitionTableBody = document.getElementById('transitionTableBody');
+const saveImageMenu = document.getElementById('saveImageMenu');
+const saveImageDropdown = document.getElementById('saveImageDropdown');
 
 function closeDialog(id) {
   document.getElementById(id).classList.add('hidden');
@@ -185,6 +191,7 @@ function initStates() {
     radius: 38,
   }));
   state.transitions = [];
+  state.transitionTable = { cells: {} };
 }
 
 function updateControls() {
@@ -236,6 +243,112 @@ function renderTable() {
       <td class="moore-only ${state.type !== 'moore' ? 'hidden' : ''}"><input data-field="outputs" data-id="${st.id}" value="${st.outputs.join(',')}"></td>
     `;
     stateTableBody.appendChild(tr);
+  });
+}
+
+function stateBitCount() {
+  return Math.max(1, Math.ceil(Math.log2(Math.max(state.numStates, 1))));
+}
+
+function generateInputCombos(count) {
+  if (count === 0) return [''];
+  const combos = [];
+  const total = Math.pow(2, count);
+  for (let i = 0; i < total; i += 1) {
+    combos.push(i.toString(2).padStart(count, '0'));
+  }
+  return combos;
+}
+
+function ensureTransitionTableStructure() {
+  if (!state.transitionTable || typeof state.transitionTable !== 'object') {
+    state.transitionTable = { cells: {} };
+  }
+  if (!state.transitionTable.cells) state.transitionTable.cells = {};
+
+  const bitCount = stateBitCount();
+  const stateBitCols = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}` });
+  }
+  if (bitCount > 3) stateBitCols.unshift({ key: 'q_ellipsis', label: '...' });
+
+  const nextStateBitCols = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q+_${i}` });
+  }
+  if (bitCount > 3) nextStateBitCols.unshift({ key: 'next_q_ellipsis', label: '...' });
+
+  const inputCols = state.inputs.map((name, idx) => ({
+    key: `in_${idx}`,
+    label: name || `Input ${idx + 1}`,
+  }));
+  const outputCols = state.outputs.map((name, idx) => ({
+    key: `out_${idx}`,
+    label: name || `Output ${idx + 1}`,
+  }));
+
+  const columns = [...stateBitCols, ...inputCols, ...nextStateBitCols, ...outputCols];
+  const combos = generateInputCombos(state.inputs.length);
+  const rows = [];
+  for (let s = 0; s < state.numStates; s += 1) {
+    combos.forEach((combo) => {
+      rows.push({ key: `${s}|${combo || 'none'}`, stateId: s, inputCombo: combo });
+    });
+  }
+
+  const validCells = new Set();
+  rows.forEach((row) => {
+    columns.forEach((col) => validCells.add(`${row.key}::${col.key}`));
+  });
+
+  Object.keys(state.transitionTable.cells).forEach((key) => {
+    if (!validCells.has(key)) delete state.transitionTable.cells[key];
+  });
+  validCells.forEach((key) => {
+    if (state.transitionTable.cells[key] === undefined) state.transitionTable.cells[key] = '';
+  });
+
+  state.transitionTable.columns = columns;
+  state.transitionTable.rows = rows;
+}
+
+function renderTransitionTable() {
+  ensureTransitionTableStructure();
+  transitionTableHead.innerHTML = '';
+  transitionTableBody.innerHTML = '';
+
+  const headerRow = document.createElement('tr');
+  const comboTh = document.createElement('th');
+  comboTh.textContent = 'State / Input';
+  headerRow.appendChild(comboTh);
+  state.transitionTable.columns.forEach((col) => {
+    const th = document.createElement('th');
+    th.textContent = col.label;
+    headerRow.appendChild(th);
+  });
+  transitionTableHead.appendChild(headerRow);
+
+  state.transitionTable.rows.forEach((row) => {
+    const tr = document.createElement('tr');
+    const labelCell = document.createElement('td');
+    labelCell.className = 'transition-row-label';
+    const comboLabel = row.inputCombo ? row.inputCombo : '–';
+    labelCell.textContent = `S${row.stateId} | ${comboLabel}`;
+    tr.appendChild(labelCell);
+
+    state.transitionTable.columns.forEach((col) => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.dataset.rowKey = row.key;
+      input.dataset.colKey = col.key;
+      input.value = state.transitionTable.cells[`${row.key}::${col.key}`] || '';
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+
+    transitionTableBody.appendChild(tr);
   });
 }
 
@@ -521,6 +634,7 @@ function download(filename, content) {
 }
 
 function saveState() {
+  ensureTransitionTableStructure();
   const payload = JSON.stringify(state, null, 2);
   const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -534,11 +648,13 @@ function loadState(data) {
   state.inputs = normalizeNames(state.inputs || []);
   state.outputs = normalizeNames(state.outputs || []);
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
+  if (!state.transitionTable) state.transitionTable = { cells: {} };
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
   updateControls();
   renderTable();
   renderPalette();
+  renderTransitionTable();
   renderDiagram();
 }
 
@@ -607,6 +723,32 @@ function captureImage(element, filename) {
     });
 }
 
+function openTransitionDrawer() {
+  renderTransitionTable();
+  transitionDrawer.classList.add('open');
+  palettePane.classList.add('collapsed');
+}
+
+function closeTransitionDrawer() {
+  transitionDrawer.classList.remove('open');
+  palettePane.classList.remove('collapsed');
+}
+
+function toggleTransitionDrawer() {
+  if (transitionDrawer.classList.contains('open')) {
+    closeTransitionDrawer();
+  } else {
+    openTransitionDrawer();
+  }
+}
+
+function captureTransitionDrawerImage() {
+  const wasOpen = transitionDrawer.classList.contains('open');
+  if (!wasOpen) openTransitionDrawer();
+  captureImage(transitionDrawer, `${state.name}-transition-table.png`);
+  if (!wasOpen) closeTransitionDrawer();
+}
+
 function applyViewTransform() {
   viewport.setAttribute(
     'transform',
@@ -658,6 +800,7 @@ function attachEvents() {
     updateControls();
     renderTable();
     renderPalette();
+    renderTransitionTable();
     renderDiagram();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
@@ -686,9 +829,26 @@ function attachEvents() {
     reader.readAsText(file);
   });
 
+  document.getElementById('toggleTransitionDrawer').addEventListener('click', toggleTransitionDrawer);
+  document.getElementById('closeTransitionDrawer').addEventListener('click', closeTransitionDrawer);
+
   document.getElementById('saveButton').addEventListener('click', saveState);
-  document.getElementById('saveImageTable').addEventListener('click', () => captureImage(tablePanel, `${state.name}-table.png`));
-  document.getElementById('saveImageDiagram').addEventListener('click', () => captureImage(document.querySelector('.playmat'), `${state.name}-diagram.png`));
+  saveImageDropdown.addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveImageMenu.classList.toggle('hidden');
+  });
+  document.getElementById('saveImageTable').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureImage(tablePanel, `${state.name}-state-definition-table.png`);
+  });
+  document.getElementById('saveImageDiagram').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureImage(document.querySelector('.playmat'), `${state.name}-state-diagram.png`);
+  });
+  document.getElementById('saveImageTransitionTable').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureTransitionDrawerImage();
+  });
 
   toggleTableBtn.addEventListener('click', () => {
     tablePanel.classList.toggle('collapsed');
@@ -720,6 +880,7 @@ function attachEvents() {
       t.inputs = selectionLabel(state.inputs, t.inputValues);
     });
     renderDiagram();
+    renderTransitionTable();
   });
 
   document.getElementById('outputsControl').addEventListener('change', (e) => {
@@ -733,6 +894,7 @@ function attachEvents() {
     renderTable();
     renderPalette();
     renderDiagram();
+    renderTransitionTable();
   });
 
   document.getElementById('typeControl').addEventListener('change', (e) => {
@@ -751,6 +913,7 @@ function attachEvents() {
       renderTable();
       renderPalette();
       renderDiagram();
+      renderTransitionTable();
     }
   });
 
@@ -767,6 +930,16 @@ function attachEvents() {
     }
     renderPalette();
     renderDiagram();
+  });
+
+  transitionTableBody.addEventListener('input', (e) => {
+    const target = e.target;
+    if (target.tagName !== 'INPUT') return;
+    const rowKey = target.dataset.rowKey;
+    const colKey = target.dataset.colKey;
+    if (!rowKey || !colKey) return;
+    if (!state.transitionTable || !state.transitionTable.cells) state.transitionTable = { cells: {} };
+    state.transitionTable.cells[`${rowKey}::${colKey}`] = target.value;
   });
 
   paletteList.addEventListener('dragstart', (e) => {
@@ -987,6 +1160,9 @@ function attachEvents() {
   });
 
   document.addEventListener('click', (e) => {
+    if (!saveImageMenu.contains(e.target) && e.target !== saveImageDropdown) {
+      saveImageMenu.classList.add('hidden');
+    }
     if (e.target.classList.contains('dialog-backdrop')) {
       e.target.classList.add('hidden');
     }
@@ -1038,6 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateControls();
   initStates();
   renderTable();
+  renderTransitionTable();
   renderPalette();
   applyViewTransform();
   renderDiagram();

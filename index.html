@@ -85,8 +85,15 @@
       <button id="quickRef" class="ghost">Quick Reference</button>
       <button id="toggleIoMode" class="ghost">Show: Binary</button>
       <button id="toggleTheme" class="ghost">Light/Dark</button>
-      <button id="saveImageTable" class="ghost">Save Table Image</button>
-      <button id="saveImageDiagram" class="ghost">Save Diagram Image</button>
+      <button id="toggleTransitionDrawer" class="ghost">State Transition Table</button>
+      <div class="dropdown">
+        <button id="saveImageDropdown" class="ghost dropdown-toggle">Save Image ▾</button>
+        <div id="saveImageMenu" class="dropdown-menu hidden">
+          <button id="saveImageTable" type="button">State Definition Table</button>
+          <button id="saveImageDiagram" type="button">State Transition Diagram</button>
+          <button id="saveImageTransitionTable" type="button">State Transition Table</button>
+        </div>
+      </div>
       <label class="file-label">
         <input type="file" id="loadButton" accept="application/json" hidden />
         <span>Load</span>
@@ -157,6 +164,21 @@
       </svg>
     </section>
   </main>
+
+  <aside id="transitionDrawer" class="transition-drawer">
+    <div class="drawer-header">
+      <h4>State Transition Table</h4>
+      <button id="closeTransitionDrawer" class="ghost" aria-label="Close transition table">✕</button>
+    </div>
+    <div class="drawer-content">
+      <div class="drawer-table-wrapper">
+        <table id="transitionTable">
+          <thead id="transitionTableHead"></thead>
+          <tbody id="transitionTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
 
   <div id="quickRefDialog" class="dialog-backdrop hidden">
     <div class="dialog">
