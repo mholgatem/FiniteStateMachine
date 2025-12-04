@@ -99,14 +99,7 @@ body {
   grid-template-columns: 12% 1fr;
   flex: 1;
   min-height: 0;
-  width: 100vw;
-}
-
-body.drawer-open {
-}
-
-body.drawer-open .workspace {
-  grid-template-columns: 12% 1fr;
+  width: 100%;
 }
 
 .state-palette.collapsed {

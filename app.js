@@ -777,14 +777,12 @@ function captureImage(element, filename) {
 function openTransitionDrawer() {
   renderTransitionTable();
   transitionDrawer.classList.add('open');
-  palettePane.classList.add('collapsed');
   document.body.classList.add('drawer-open');
   document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
 }
 
 function closeTransitionDrawer() {
   transitionDrawer.classList.remove('open');
-  palettePane.classList.remove('collapsed');
   document.body.classList.remove('drawer-open');
 }
 
