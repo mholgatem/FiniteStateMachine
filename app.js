@@ -882,10 +882,41 @@ function toggleTransitionDrawer() {
   }
 }
 
-function captureTransitionDrawerImage() {
+async function captureTransitionDrawerImage() {
+  const table = document.getElementById('transitionTable');
+  if (!table) return;
+
   const wasOpen = transitionDrawer.classList.contains('open');
   if (!wasOpen) openTransitionDrawer();
-  captureImage(transitionDrawer, `${state.name}-transition-table.png`);
+
+  const clone = table.cloneNode(true);
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '0';
+  wrapper.style.top = '0';
+  wrapper.style.visibility = 'hidden';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.zIndex = '9999';
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  await new Promise(requestAnimationFrame);
+
+  const width = clone.scrollWidth;
+  const height = clone.scrollHeight;
+
+  const canvas = await html2canvas(clone, {
+    width,
+    height,
+    scale: window.devicePixelRatio || 1,
+    useCORS: true,
+    backgroundColor: null,
+  });
+
+  const url = canvas.toDataURL('image/png');
+  download(`${state.name}-transition-table.png`, url);
+
+  document.body.removeChild(wrapper);
   if (!wasOpen) closeTransitionDrawer();
 }
 
