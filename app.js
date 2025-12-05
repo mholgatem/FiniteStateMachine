@@ -800,16 +800,32 @@ function captureImage(element, filename) {
   const scrollableChild = element.querySelector('.table-wrapper, .drawer-table-wrapper');
   if (scrollableChild) {
     tempStyle(scrollableChild, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
+    scrollableChild.scrollTop = 0;
+    scrollableChild.scrollLeft = 0;
+  }
+  const tableEl = element.querySelector('#transitionTable');
+  const tableWrapper = element.querySelector('.drawer-table-wrapper');
+  const wrapperStyles = tableWrapper ? getComputedStyle(tableWrapper) : null;
+  const paddingX = wrapperStyles
+    ? parseFloat(wrapperStyles.paddingLeft || '0') + parseFloat(wrapperStyles.paddingRight || '0')
+    : 0;
+  const paddingY = wrapperStyles
+    ? parseFloat(wrapperStyles.paddingTop || '0') + parseFloat(wrapperStyles.paddingBottom || '0')
+    : 0;
+  if (tableEl) {
+    tempStyle(tableEl, { width: `${tableEl.scrollWidth}px`, height: 'auto' });
   }
 
   const width = Math.max(
     element.scrollWidth || element.clientWidth || 0,
     scrollableChild ? scrollableChild.scrollWidth || 0 : 0,
+    tableEl ? tableEl.scrollWidth + paddingX : 0,
     element.offsetWidth || 0,
   );
   const height = Math.max(
     element.scrollHeight || element.clientHeight || 0,
     scrollableChild ? scrollableChild.scrollHeight || 0 : 0,
+    tableEl ? tableEl.scrollHeight + paddingY : 0,
     element.offsetHeight || 0,
   );
   const maxDimension = 2500;
