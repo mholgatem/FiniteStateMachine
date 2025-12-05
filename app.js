@@ -7,6 +7,7 @@ const state = {
   states: [],
   transitions: [],
   showBinary: true,
+  transitionTable: { cells: {} },
 };
 
 let currentArrow = null;
@@ -15,8 +16,12 @@ let arrowDialogTarget = null;
 let previewPath = null;
 let deletedTransitions = [];
 let viewState = { scale: 1, panX: 0, panY: 0 };
+let unsavedChanges = false;
+let drawerWidth = 520;
 let isPanning = false;
 let panStart = { x: 0, y: 0 };
+let transitionTableValueColumns = [];
+let transitionTableGroupSize = 0;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -34,6 +39,13 @@ const toolbarTitle = document.getElementById('toolbarTitle');
 const mealyOutputRow = document.getElementById('mealyOutputRow');
 const inputChoices = document.getElementById('inputChoices');
 const outputChoices = document.getElementById('outputChoices');
+const transitionDrawer = document.getElementById('transitionDrawer');
+const transitionTableHead = document.getElementById('transitionTableHead');
+const transitionTableBody = document.getElementById('transitionTableBody');
+const saveImageMenu = document.getElementById('saveImageMenu');
+const saveImageDropdown = document.getElementById('saveImageDropdown');
+const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
+const toolbarNewMachine = document.getElementById('toolbarNewMachine');
 
 function closeDialog(id) {
   document.getElementById(id).classList.add('hidden');
@@ -41,6 +53,29 @@ function closeDialog(id) {
 
 function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
+}
+
+function markDirty() {
+  unsavedChanges = true;
+}
+
+function clearDirty() {
+  unsavedChanges = false;
+}
+
+function promptToSaveIfDirty(next) {
+  if (!unsavedChanges) {
+    next();
+    return;
+  }
+  const wantsSave = window.confirm('You have unsaved changes. Save before continuing?');
+  if (wantsSave) {
+    saveState();
+    next();
+    return;
+  }
+  const proceed = window.confirm('Continue without saving?');
+  if (proceed) next();
 }
 
 function normalizeNames(list) {
@@ -78,6 +113,29 @@ function selectionLabel(names, values) {
 
 function escapeHtml(str) {
   return str.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+}
+
+function formatScriptedText(text) {
+  let result = '';
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '_' || ch === '^') {
+      const cls = ch === '_' ? 'subscript-text' : 'superscript-text';
+      let start = i + 1;
+      let end = start;
+      while (end < text.length && /[A-Za-z0-9+]/.test(text[end])) end += 1;
+      const segment = text.slice(start, end) || text[start] || '';
+      if (segment) {
+        result += `<span class="${cls}">${escapeHtml(segment)}</span>`;
+      }
+      i = end;
+      continue;
+    }
+    result += escapeHtml(ch);
+    i += 1;
+  }
+  return result;
 }
 
 function nameToSvg(name) {
@@ -185,6 +243,7 @@ function initStates() {
     radius: 38,
   }));
   state.transitions = [];
+  state.transitionTable = { cells: {} };
 }
 
 function updateControls() {
@@ -236,6 +295,161 @@ function renderTable() {
       <td class="moore-only ${state.type !== 'moore' ? 'hidden' : ''}"><input data-field="outputs" data-id="${st.id}" value="${st.outputs.join(',')}"></td>
     `;
     stateTableBody.appendChild(tr);
+  });
+}
+
+function stateBitCount() {
+  return Math.max(1, Math.ceil(Math.log2(Math.max(state.numStates, 1))));
+}
+
+function generateInputCombos(count) {
+  if (count === 0) return [''];
+  const combos = [];
+  const total = Math.pow(2, count);
+  for (let i = 0; i < total; i += 1) {
+    combos.push(i.toString(2).padStart(count, '0'));
+  }
+  return combos;
+}
+
+function ensureTransitionTableStructure() {
+  if (!state.transitionTable || typeof state.transitionTable !== 'object') {
+    state.transitionTable = { cells: {} };
+  }
+  if (!state.transitionTable.cells) state.transitionTable.cells = {};
+
+  const bitCount = stateBitCount();
+  const stateBitCols = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}`, type: 'value' });
+  }
+
+  const nextStateBitCols = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q_${i}^+`, type: 'value' });
+  }
+
+  const inputCols = state.inputs.map((name, idx) => ({
+    key: `in_${idx}`,
+    label: name || `Input ${idx + 1}`,
+    type: 'value',
+  }));
+  const outputCols = state.outputs.map((name, idx) => ({
+    key: `out_${idx}`,
+    label: name || `Output ${idx + 1}`,
+    type: 'value',
+  }));
+
+  const columns = [
+    { key: 'row_index', label: '#', type: 'rowIndex' },
+    { key: 'spacer_0', label: '', type: 'spacer' },
+    ...stateBitCols,
+    ...inputCols,
+    { key: 'spacer_1', label: '', type: 'spacer' },
+    ...nextStateBitCols,
+    { key: 'spacer_2', label: '', type: 'spacer' },
+    ...outputCols,
+  ];
+
+  transitionTableValueColumns = columns.filter((col) => col.type === 'value');
+
+  const combos = generateInputCombos(state.inputs.length);
+  transitionTableGroupSize = combos.length || 1;
+  const rows = [];
+  for (let s = 0; s < state.numStates; s += 1) {
+    combos.forEach((combo) => {
+      rows.push({ key: `${s}|${combo || 'none'}`, stateId: s, inputCombo: combo });
+    });
+  }
+
+  const validCells = new Set();
+  rows.forEach((row) => {
+    transitionTableValueColumns.forEach((col) => validCells.add(`${row.key}::${col.key}`));
+  });
+
+  Object.keys(state.transitionTable.cells).forEach((key) => {
+    if (!validCells.has(key)) delete state.transitionTable.cells[key];
+  });
+  validCells.forEach((key) => {
+    if (state.transitionTable.cells[key] === undefined) state.transitionTable.cells[key] = '';
+  });
+
+  state.transitionTable.columns = columns;
+  state.transitionTable.rows = rows;
+  state.transitionTable.valueColumns = transitionTableValueColumns;
+  state.transitionTable.groupSize = transitionTableGroupSize;
+}
+
+function hasTransitionTableValues() {
+  if (!state.transitionTable || !state.transitionTable.cells) return false;
+  return Object.values(state.transitionTable.cells).some((val) => (val ?? '').toString().trim());
+}
+
+function confirmTransitionTableReset(kind) {
+  if (!hasTransitionTableValues()) return true;
+  return window.confirm(`Changing the number of ${kind} will reset your transition table, proceed?`);
+}
+
+function renderTransitionTable() {
+  ensureTransitionTableStructure();
+  transitionTableHead.innerHTML = '';
+  transitionTableBody.innerHTML = '';
+
+  const headerRow = document.createElement('tr');
+  const valueIndexMap = new Map(
+    transitionTableValueColumns.map((col, idx) => [col.key, idx]),
+  );
+  state.transitionTable.columns.forEach((col) => {
+    const th = document.createElement('th');
+    th.innerHTML = formatScriptedText(col.label);
+    if (col.type === 'spacer') th.classList.add('col-spacer');
+    if (col.type === 'rowIndex') th.classList.add('row-index-cell');
+    headerRow.appendChild(th);
+  });
+  transitionTableHead.appendChild(headerRow);
+
+  state.transitionTable.rows.forEach((row, rowIdx) => {
+    const tr = document.createElement('tr');
+    tr.dataset.rowIndex = rowIdx;
+
+    state.transitionTable.columns.forEach((col) => {
+      const td = document.createElement('td');
+      if (col.type === 'spacer') {
+        td.classList.add('col-spacer');
+        tr.appendChild(td);
+        return;
+      }
+      if (col.type === 'rowIndex') {
+        td.textContent = rowIdx + 1;
+        td.classList.add('row-index-cell');
+        tr.appendChild(td);
+        return;
+      }
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.dataset.rowKey = row.key;
+      input.dataset.colKey = col.key;
+      input.dataset.rowIndex = rowIdx;
+      input.dataset.valueColIndex = valueIndexMap.get(col.key);
+      input.value = state.transitionTable.cells[`${row.key}::${col.key}`] || '';
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+
+    transitionTableBody.appendChild(tr);
+
+    if (
+      transitionTableGroupSize > 0 &&
+      (rowIdx + 1) % transitionTableGroupSize === 0 &&
+      rowIdx < state.transitionTable.rows.length - 1
+    ) {
+      const spacerRow = document.createElement('tr');
+      spacerRow.classList.add('row-spacer');
+      const spacerCell = document.createElement('td');
+      spacerCell.colSpan = state.transitionTable.columns.length;
+      spacerRow.appendChild(spacerCell);
+      transitionTableBody.appendChild(spacerRow);
+    }
   });
 }
 
@@ -521,11 +735,13 @@ function download(filename, content) {
 }
 
 function saveState() {
+  ensureTransitionTableStructure();
   const payload = JSON.stringify(state, null, 2);
   const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   download(`${state.name || 'fsm'}-save.json`, url);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  clearDirty();
 }
 
 function loadState(data) {
@@ -534,12 +750,15 @@ function loadState(data) {
   state.inputs = normalizeNames(state.inputs || []);
   state.outputs = normalizeNames(state.outputs || []);
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
+  if (!state.transitionTable) state.transitionTable = { cells: {} };
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
   updateControls();
   renderTable();
   renderPalette();
+  renderTransitionTable();
   renderDiagram();
+  clearDirty();
 }
 
 function captureImage(element, filename) {
@@ -578,15 +797,44 @@ function captureImage(element, filename) {
   shadowedNodes.forEach((node) => tempStyle(node, { boxShadow: 'none' }));
 
   tempStyle(element, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
-  const scrollableChild = element.querySelector('.table-wrapper');
+  const scrollableChild = element.querySelector('.table-wrapper, .drawer-table-wrapper');
   if (scrollableChild) {
     tempStyle(scrollableChild, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
+    scrollableChild.scrollTop = 0;
+    scrollableChild.scrollLeft = 0;
+  }
+  const tableEl = element.querySelector('#transitionTable');
+  const tableWrapper = element.querySelector('.drawer-table-wrapper');
+  const wrapperStyles = tableWrapper ? getComputedStyle(tableWrapper) : null;
+  const paddingX = wrapperStyles
+    ? parseFloat(wrapperStyles.paddingLeft || '0') + parseFloat(wrapperStyles.paddingRight || '0')
+    : 0;
+  const paddingY = wrapperStyles
+    ? parseFloat(wrapperStyles.paddingTop || '0') + parseFloat(wrapperStyles.paddingBottom || '0')
+    : 0;
+  if (tableEl) {
+    tempStyle(tableEl, { width: `${tableEl.scrollWidth}px`, height: 'auto' });
   }
 
-  const width = element.scrollWidth || element.clientWidth || 0;
-  const height = element.scrollHeight || element.clientHeight || 0;
+  const width = Math.max(
+    element.scrollWidth || element.clientWidth || 0,
+    scrollableChild ? scrollableChild.scrollWidth || 0 : 0,
+    tableEl ? tableEl.scrollWidth + paddingX : 0,
+    element.offsetWidth || 0,
+  );
+  const height = Math.max(
+    element.scrollHeight || element.clientHeight || 0,
+    scrollableChild ? scrollableChild.scrollHeight || 0 : 0,
+    tableEl ? tableEl.scrollHeight + paddingY : 0,
+    element.offsetHeight || 0,
+  );
   const maxDimension = 2500;
   const scale = Math.min(1, maxDimension / Math.max(width, height, 1));
+
+  tempStyle(element, { width: `${width}px`, height: `${height}px` });
+  if (scrollableChild) {
+    tempStyle(scrollableChild, { width: `${width}px`, height: `${height}px` });
+  }
 
   html2canvas(element, {
     backgroundColor: captureBg,
@@ -605,6 +853,71 @@ function captureImage(element, filename) {
     .finally(() => {
       cleanups.reverse().forEach((fn) => fn());
     });
+}
+
+function openTransitionDrawer() {
+  renderTransitionTable();
+  transitionDrawer.classList.add('open');
+  document.body.classList.add('drawer-open');
+  document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
+}
+
+function closeTransitionDrawer() {
+  transitionDrawer.classList.remove('open');
+  document.body.classList.remove('drawer-open');
+}
+
+function updateDrawerWidth(width) {
+  const maxAllowed = Math.max(320, window.innerWidth - 260);
+  const maxWidth = Math.min(window.innerWidth * 0.85, maxAllowed);
+  drawerWidth = Math.max(320, Math.min(width, Math.floor(maxWidth)));
+  document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
+}
+
+function toggleTransitionDrawer() {
+  if (transitionDrawer.classList.contains('open')) {
+    closeTransitionDrawer();
+  } else {
+    openTransitionDrawer();
+  }
+}
+
+async function captureTransitionDrawerImage() {
+  const table = document.getElementById('transitionTable');
+  if (!table) return;
+
+  const wasOpen = transitionDrawer.classList.contains('open');
+  if (!wasOpen) openTransitionDrawer();
+
+  const clone = table.cloneNode(true);
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '0';
+  wrapper.style.top = '0';
+  wrapper.style.opacity = '0';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.zIndex = '9999';
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  await new Promise(requestAnimationFrame);
+
+  const width = clone.scrollWidth;
+  const height = clone.scrollHeight;
+
+  const canvas = await html2canvas(clone, {
+    width,
+    height,
+    scale: window.devicePixelRatio || 1,
+    useCORS: true,
+    backgroundColor: '#fff',
+  });
+
+  const url = canvas.toDataURL('image/png');
+  download(`${state.name}-transition-table.png`, url);
+
+  document.body.removeChild(wrapper);
+  if (!wasOpen) closeTransitionDrawer();
 }
 
 function applyViewTransform() {
@@ -639,11 +952,16 @@ function nearestTOnPath(path, point) {
 }
 
 function attachEvents() {
+  updateDrawerWidth(Math.min(drawerWidth, Math.floor(window.innerWidth * 0.85)));
+
   document.querySelectorAll('[data-close]').forEach((btn) => {
     btn.addEventListener('click', () => closeDialog(btn.dataset.close));
   });
 
-  document.getElementById('newMachineBtn').addEventListener('click', () => openDialog('newMachineDialog'));
+  document.getElementById('newMachineBtn').addEventListener('click', () =>
+    promptToSaveIfDirty(() => openDialog('newMachineDialog'))
+  );
+  toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
 
   document.getElementById('createMachine').addEventListener('click', () => {
@@ -658,9 +976,11 @@ function attachEvents() {
     updateControls();
     renderTable();
     renderPalette();
+    renderTransitionTable();
     renderDiagram();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
+    clearDirty();
   });
 
   document.getElementById('loadMachineInput').addEventListener('change', (e) => {
@@ -686,9 +1006,52 @@ function attachEvents() {
     reader.readAsText(file);
   });
 
+  document.getElementById('toggleTransitionDrawer').addEventListener('click', toggleTransitionDrawer);
+  document.getElementById('closeTransitionDrawer').addEventListener('click', closeTransitionDrawer);
+
+  transitionDrawerHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = drawerWidth;
+    const moveHandler = (ev) => {
+      const delta = startX - ev.clientX;
+      updateDrawerWidth(startWidth + delta);
+    };
+    const upHandler = () => {
+      document.removeEventListener('mousemove', moveHandler);
+      document.removeEventListener('mouseup', upHandler);
+    };
+    document.addEventListener('mousemove', moveHandler);
+    document.addEventListener('mouseup', upHandler);
+  });
+
+  window.addEventListener('resize', () => {
+    updateDrawerWidth(drawerWidth);
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (!unsavedChanges) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
   document.getElementById('saveButton').addEventListener('click', saveState);
-  document.getElementById('saveImageTable').addEventListener('click', () => captureImage(tablePanel, `${state.name}-table.png`));
-  document.getElementById('saveImageDiagram').addEventListener('click', () => captureImage(document.querySelector('.playmat'), `${state.name}-diagram.png`));
+  saveImageDropdown.addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveImageMenu.classList.toggle('hidden');
+  });
+  document.getElementById('saveImageTable').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureImage(tablePanel, `${state.name}-state-definition-table.png`);
+  });
+  document.getElementById('saveImageDiagram').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureImage(document.querySelector('.playmat'), `${state.name}-state-diagram.png`);
+  });
+  document.getElementById('saveImageTransitionTable').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureTransitionDrawerImage();
+  });
 
   toggleTableBtn.addEventListener('click', () => {
     tablePanel.classList.toggle('collapsed');
@@ -700,6 +1063,7 @@ function attachEvents() {
     toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
     renderPalette();
     renderDiagram();
+    markDirty();
   });
 
   document.getElementById('toggleTheme').addEventListener('click', () => {
@@ -710,20 +1074,45 @@ function attachEvents() {
   document.getElementById('nameControl').addEventListener('input', (e) => {
     state.name = e.target.value;
     toolbarTitle.textContent = state.name;
+    markDirty();
   });
 
   document.getElementById('inputsControl').addEventListener('change', (e) => {
-    state.inputs = parseList(e.target.value);
+    const newInputs = parseList(e.target.value);
+    if (newInputs.join(',') === state.inputs.join(',')) {
+      e.target.value = state.inputs.join(', ');
+      return;
+    }
+    if (!confirmTransitionTableReset('inputs')) {
+      e.target.value = state.inputs.join(', ');
+      return;
+    }
+    state.transitionTable = { cells: {} };
+    state.inputs = newInputs;
+    e.target.value = state.inputs.join(', ');
     state.transitions.forEach((t) => {
       t.inputValues = (t.inputValues || []).slice(0, state.inputs.length);
       while (t.inputValues.length < state.inputs.length) t.inputValues.push('X');
       t.inputs = selectionLabel(state.inputs, t.inputValues);
     });
     renderDiagram();
+    renderTransitionTable();
+    markDirty();
   });
 
   document.getElementById('outputsControl').addEventListener('change', (e) => {
-    state.outputs = parseList(e.target.value);
+    const newOutputs = parseList(e.target.value);
+    if (newOutputs.join(',') === state.outputs.join(',')) {
+      e.target.value = state.outputs.join(', ');
+      return;
+    }
+    if (!confirmTransitionTableReset('outputs')) {
+      e.target.value = state.outputs.join(', ');
+      return;
+    }
+    state.transitionTable = { cells: {} };
+    state.outputs = newOutputs;
+    e.target.value = state.outputs.join(', ');
     state.states.forEach((s) => (s.outputs = state.outputs.map(() => '0')));
     state.transitions.forEach((t) => {
       t.outputValues = (t.outputValues || []).slice(0, state.outputs.length);
@@ -733,6 +1122,8 @@ function attachEvents() {
     renderTable();
     renderPalette();
     renderDiagram();
+    renderTransitionTable();
+    markDirty();
   });
 
   document.getElementById('typeControl').addEventListener('change', (e) => {
@@ -741,16 +1132,24 @@ function attachEvents() {
     renderTable();
     renderDiagram();
     renderPalette();
+    markDirty();
   });
 
   document.getElementById('stateControl').addEventListener('change', (e) => {
     const newCount = Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1));
     if (newCount !== state.numStates) {
+      if (!confirmTransitionTableReset('states')) {
+        e.target.value = state.numStates;
+        return;
+      }
       state.numStates = newCount;
+      e.target.value = state.numStates;
       initStates();
       renderTable();
       renderPalette();
       renderDiagram();
+      renderTransitionTable();
+      markDirty();
     }
   });
 
@@ -767,6 +1166,55 @@ function attachEvents() {
     }
     renderPalette();
     renderDiagram();
+    markDirty();
+  });
+
+  transitionTableBody.addEventListener('input', (e) => {
+    const target = e.target;
+    if (target.tagName !== 'INPUT') return;
+    const rowKey = target.dataset.rowKey;
+    const colKey = target.dataset.colKey;
+    if (!rowKey || !colKey) return;
+    let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+    if (val.length > 1) val = val[0];
+    target.value = val;
+    if (!state.transitionTable || !state.transitionTable.cells) state.transitionTable = { cells: {} };
+    state.transitionTable.cells[`${rowKey}::${colKey}`] = val;
+    markDirty();
+  });
+
+  transitionTableBody.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT') {
+      e.target.select();
+    }
+  });
+
+  transitionTableBody.addEventListener('keydown', (e) => {
+    const target = e.target;
+    if (target.tagName !== 'INPUT') return;
+    const { key } = e;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+    const rowIdx = parseInt(target.dataset.rowIndex, 10);
+    const colIdx = parseInt(target.dataset.valueColIndex, 10);
+    if (Number.isNaN(rowIdx) || Number.isNaN(colIdx)) return;
+    const totalRows = (state.transitionTable?.rows || []).length;
+    const totalCols = transitionTableValueColumns.length;
+    if (!totalRows || !totalCols) return;
+
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+    if (key === 'ArrowLeft') nextCol = Math.max(0, colIdx - 1);
+    if (key === 'ArrowRight') nextCol = Math.min(totalCols - 1, colIdx + 1);
+    if (key === 'ArrowUp') nextRow = Math.max(0, rowIdx - 1);
+    if (key === 'ArrowDown') nextRow = Math.min(totalRows - 1, rowIdx + 1);
+
+    const selector = `input[data-row-index="${nextRow}"][data-value-col-index="${nextCol}"]`;
+    const nextInput = transitionTableBody.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+      e.preventDefault();
+    }
   });
 
   paletteList.addEventListener('dragstart', (e) => {
@@ -786,6 +1234,7 @@ function attachEvents() {
     st.placed = true;
     renderPalette();
     renderDiagram();
+    markDirty();
   });
 
   diagram.addEventListener('wheel', (e) => {
@@ -831,6 +1280,7 @@ function attachEvents() {
       const upHandler = () => {
         document.removeEventListener('mousemove', moveHandler);
         document.removeEventListener('mouseup', upHandler);
+        markDirty();
       };
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
@@ -866,6 +1316,7 @@ function attachEvents() {
       const upHandler = () => {
         document.removeEventListener('mousemove', moveHandler);
         document.removeEventListener('mouseup', upHandler);
+        markDirty();
       };
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
@@ -879,6 +1330,7 @@ function attachEvents() {
       const offsetX = st.x - start.x;
       const offsetY = st.y - start.y;
       const isResize = e.ctrlKey;
+      let moved = false;
       if (e.button === 2) {
         currentArrow = { from: id, toPoint: getSVGPoint(e.clientX, e.clientY), arcOffset: 0 };
         renderDiagram();
@@ -895,6 +1347,7 @@ function attachEvents() {
           st.y = pt.y + offsetY;
         }
         st.placed = true;
+        moved = true;
         renderDiagram();
       };
       const upHandler = (ev) => {
@@ -906,6 +1359,7 @@ function attachEvents() {
           renderPalette();
           renderDiagram();
         }
+        if (moved) markDirty();
       };
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
@@ -933,6 +1387,7 @@ function attachEvents() {
         });
         selectedArrowId = newId;
         renderDiagram();
+        markDirty();
       }
     }
     if (previewPath && previewPath.parentNode) {
@@ -962,6 +1417,7 @@ function attachEvents() {
       renderDiagram();
     }
     closeDialog('arrowDialog');
+    markDirty();
   });
 
   document.addEventListener('keydown', (e) => {
@@ -974,6 +1430,7 @@ function attachEvents() {
       }
       selectedArrowId = null;
       renderDiagram();
+      markDirty();
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -982,11 +1439,15 @@ function attachEvents() {
         state.transitions.push(restored);
         selectedArrowId = restored.id;
         renderDiagram();
+        markDirty();
       }
     }
   });
 
   document.addEventListener('click', (e) => {
+    if (!saveImageMenu.contains(e.target) && e.target !== saveImageDropdown) {
+      saveImageMenu.classList.add('hidden');
+    }
     if (e.target.classList.contains('dialog-backdrop')) {
       e.target.classList.add('hidden');
     }
@@ -1038,6 +1499,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateControls();
   initStates();
   renderTable();
+  renderTransitionTable();
   renderPalette();
   applyViewTransform();
   renderDiagram();
