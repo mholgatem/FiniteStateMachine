@@ -137,6 +137,12 @@ body {
   background: var(--accent);
 }
 
+.drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .drawer-content {
   flex: 1;
   overflow: hidden;

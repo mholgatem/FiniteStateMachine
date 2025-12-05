@@ -547,6 +547,123 @@ function evaluateCoverage(stateId) {
   return { missing, overfull };
 }
 
+function normalizeBinaryValue(val) {
+  if (val === undefined || val === null) return '';
+  const normalized = val.toString().toUpperCase().replace(/[^01X]/g, '');
+  return normalized ? normalized[0] : '';
+}
+
+function normalizeBitArray(values, expectedLength) {
+  const result = Array(expectedLength).fill('');
+  (values || []).forEach((val, idx) => {
+    if (idx < expectedLength) result[idx] = normalizeBinaryValue(val);
+  });
+  return result;
+}
+
+function stateBinaryCode(stateId, bitCount) {
+  const st = state.states.find((s) => s.id === stateId);
+  if (!st) return null;
+  const cleaned = (st.binary || stateId.toString(2)).replace(/[^01]/g, '');
+  return cleaned.padStart(bitCount, '0').slice(-bitCount);
+}
+
+function expectedOutputsForTransition(tr) {
+  if (state.type === 'moore') {
+    const target = state.states.find((s) => s.id === tr.to);
+    return normalizeBitArray(target ? target.outputs : [], state.outputs.length);
+  }
+  normalizeTransition(tr);
+  return normalizeBitArray(tr.outputValues, state.outputs.length);
+}
+
+function buildDiagramExpectations() {
+  const bitCount = stateBitCount();
+  const expectations = new Map();
+  let conflict = false;
+
+  state.transitions.forEach((tr) => {
+    normalizeTransition(tr);
+    const combos = combinationsFromValues(tr.inputValues);
+    const nextBitsStr = stateBinaryCode(tr.to, bitCount) || '';
+    const nextStateBits = normalizeBitArray(nextBitsStr.split(''), bitCount);
+    const outputs = expectedOutputsForTransition(tr);
+
+    if (!nextBitsStr || nextStateBits.some((v) => !v) || outputs.some((v) => !v)) {
+      conflict = true;
+      return;
+    }
+
+    combos.forEach((combo) => {
+      const key = `${tr.from}|${combo || 'none'}`;
+      const existing = expectations.get(key);
+      if (!existing) {
+        expectations.set(key, { nextStateBits, outputs });
+        return;
+      }
+      if (!arraysCompatible(existing.nextStateBits, nextStateBits)) conflict = true;
+      if (!arraysCompatible(existing.outputs, outputs)) conflict = true;
+    });
+  });
+
+  return { expectations, conflict };
+}
+
+function readTransitionTableRowValues(row, nextStateCols, outputCols) {
+  const cells = state.transitionTable?.cells || {};
+  const readVal = (colKey) => normalizeBinaryValue(cells[`${row.key}::${colKey}`]);
+  return {
+    nextStateBits: nextStateCols.map((col) => readVal(col.key)),
+    outputs: outputCols.map((col) => readVal(col.key)),
+  };
+}
+
+function valuesCompatible(diagramVal, tableVal) {
+  const expected = normalizeBinaryValue(diagramVal);
+  const actual = normalizeBinaryValue(tableVal);
+  if (!expected || !actual) return false;
+  if (expected === 'X' || actual === 'X') return true;
+  return expected === actual;
+}
+
+function arraysCompatible(expectedArr, actualArr) {
+  if (expectedArr.length !== actualArr.length) return false;
+  return expectedArr.every((val, idx) => valuesCompatible(val, actualArr[idx]));
+}
+
+function verifyTransitionTableAgainstDiagram() {
+  ensureTransitionTableStructure();
+  const { expectations, conflict } = buildDiagramExpectations();
+
+  const nextStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('next_q_'));
+  const outputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('out_'));
+
+  let matches = !conflict;
+
+  state.transitionTable.rows.forEach((row) => {
+    if (!matches) return;
+    const expected = expectations.get(row.key);
+    if (!expected) {
+      matches = false;
+      return;
+    }
+    const actual = readTransitionTableRowValues(row, nextStateCols, outputCols);
+    if (!arraysCompatible(expected.nextStateBits, actual.nextStateBits)) {
+      matches = false;
+      return;
+    }
+    if (!arraysCompatible(expected.outputs, actual.outputs)) {
+      matches = false;
+    }
+  });
+
+  if (matches) {
+    window.alert('Your state transition table matches your state transition diagram');
+  } else {
+    window.alert('Your state transition table does not match your state transition diagram');
+  }
+}
+
 function endpointsForArc(from, to, arcOffset = 0) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -1007,6 +1124,9 @@ function attachEvents() {
   });
 
   document.getElementById('toggleTransitionDrawer').addEventListener('click', toggleTransitionDrawer);
+  document
+    .getElementById('verifyTransitionTable')
+    .addEventListener('click', verifyTransitionTableAgainstDiagram);
   document.getElementById('closeTransitionDrawer').addEventListener('click', closeTransitionDrawer);
 
   transitionDrawerHandle.addEventListener('mousedown', (e) => {
