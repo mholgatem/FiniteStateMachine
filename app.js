@@ -393,7 +393,7 @@ function ensureTransitionTableStructure() {
     { key: 'row_index', label: '#', type: 'rowIndex' },
     { key: 'spacer_0', label: '', type: 'spacer' },
     ...stateBitCols,
-    { key: 'spacer_state_inputs', label: '|', type: 'spacer' },
+    { key: 'spacer_state_inputs', label: '', type: 'spacer' },
     ...inputCols,
     { key: 'spacer_1', label: '', type: 'spacer' },
     ...nextStateBitCols,
