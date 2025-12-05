@@ -199,7 +199,7 @@ body {
 
 #transitionTable thead {
   position: sticky;
-  top: var(--cell-hider-height);
+  top: 0;
   z-index: 3;
 }
 
@@ -212,14 +212,14 @@ body {
 
 #transitionTable th {
   position: sticky;
-  top: var(--cell-hider-height);
+  /* top: 0; */
   z-index: 4;
 }
 
 #cellHider {
-  position: sticky;
-  top: 0;
-  height: var(--cell-hider-height);
+  position: fixed;
+  /* top: 0; */
+  height: 1rem;
   width: 100%;
   background: var(--surface);
   z-index: 5;
@@ -248,7 +248,7 @@ body {
 .row-index-cell {
   width: 48px;
   font-weight: 700;
-  background: var(--surface-alt);
+  /* background: var(--surface-alt); */
 }
 
 .transition-row-label {
