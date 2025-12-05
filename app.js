@@ -55,8 +55,31 @@ function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
+function clearVerificationStatus() {
+  const verifyBtn = document.getElementById('verifyTransitionTable');
+  if (verifyBtn) verifyBtn.classList.remove('verified');
+}
+
+function diagramHasHighlightedStates() {
+  return state.states.some((st) => {
+    if (!st.placed) return false;
+    const coverage = evaluateCoverage(st.id);
+    return coverage.missing || coverage.overfull;
+  });
+}
+
+function updateVerifyButtonState() {
+  const verifyBtn = document.getElementById('verifyTransitionTable');
+  if (!verifyBtn) return;
+  const hasErrors = diagramHasHighlightedStates();
+  verifyBtn.disabled = hasErrors;
+  if (hasErrors) verifyBtn.classList.remove('verified');
+}
+
 function markDirty() {
   unsavedChanges = true;
+  clearVerificationStatus();
+  updateVerifyButtonState();
 }
 
 function clearDirty() {
@@ -451,6 +474,8 @@ function renderTransitionTable() {
       transitionTableBody.appendChild(spacerRow);
     }
   });
+
+  updateVerifyButtonState();
 }
 
 function clearDiagram() {
@@ -467,6 +492,7 @@ function renderDiagram() {
     drawState(st);
   });
   drawPreview();
+  updateVerifyButtonState();
 }
 
 function drawState(st) {
@@ -631,6 +657,23 @@ function arraysCompatible(expectedArr, actualArr) {
   return expectedArr.every((val, idx) => valuesCompatible(val, actualArr[idx]));
 }
 
+function stateIsUsed(stateId) {
+  const st = state.states.find((s) => s.id === stateId);
+  if (!st) return false;
+  const participatesInTransition = state.transitions.some(
+    (tr) => tr.from === stateId || tr.to === stateId,
+  );
+  return st.placed || participatesInTransition;
+}
+
+function transitionTableRowIsBlank(row) {
+  const cells = state.transitionTable?.cells || {};
+  return transitionTableValueColumns.every((col) => {
+    const raw = cells[`${row.key}::${col.key}`];
+    return !normalizeBinaryValue(raw);
+  });
+}
+
 function verifyTransitionTableAgainstDiagram() {
   ensureTransitionTableStructure();
   const { expectations, conflict } = buildDiagramExpectations();
@@ -642,6 +685,8 @@ function verifyTransitionTableAgainstDiagram() {
 
   state.transitionTable.rows.forEach((row) => {
     if (!matches) return;
+    if (!stateIsUsed(row.stateId)) return;
+    if (transitionTableRowIsBlank(row)) return;
     const expected = expectations.get(row.key);
     if (!expected) {
       matches = false;
@@ -658,9 +703,11 @@ function verifyTransitionTableAgainstDiagram() {
   });
 
   if (matches) {
-    window.alert('Your state transition table matches your state transition diagram');
+    const verifyBtn = document.getElementById('verifyTransitionTable');
+    if (verifyBtn) verifyBtn.classList.add('verified');
   } else {
     window.alert('Your state transition table does not match your state transition diagram');
+    clearVerificationStatus();
   }
 }
 
@@ -875,6 +922,7 @@ function loadState(data) {
   renderPalette();
   renderTransitionTable();
   renderDiagram();
+  clearVerificationStatus();
   clearDirty();
 }
 
@@ -1097,6 +1145,7 @@ function attachEvents() {
     renderDiagram();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
+    clearVerificationStatus();
     clearDirty();
   });
 
@@ -1295,7 +1344,10 @@ function attachEvents() {
     const rowKey = target.dataset.rowKey;
     const colKey = target.dataset.colKey;
     if (!rowKey || !colKey) return;
-    let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+    const isCurrentStateCol = colKey.startsWith('q_');
+    const isInputCol = colKey.startsWith('in_');
+    const sanitizePattern = isCurrentStateCol || isInputCol ? /[^01]/g : /[^01X]/gi;
+    let val = (target.value || '').toUpperCase().replace(sanitizePattern, '');
     if (val.length > 1) val = val[0];
     target.value = val;
     if (!state.transitionTable || !state.transitionTable.cells) state.transitionTable = { cells: {} };

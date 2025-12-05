@@ -143,6 +143,18 @@ body {
   gap: 0.5rem;
 }
 
+#verifyTransitionTable.verified::before {
+  content: '✓';
+  color: #22c55e;
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+#verifyTransitionTable:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .drawer-content {
   flex: 1;
   overflow: hidden;
