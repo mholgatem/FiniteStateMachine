@@ -204,6 +204,9 @@ body {
 
 #transitionTable th {
   background: var(--accent);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 #transitionTable td input {
@@ -506,7 +509,7 @@ svg text {
 }
 
 .state-node.selected {
-  stroke: var(--accent);
+  stroke: #00d7ff;
   stroke-width: 3px;
 }
 

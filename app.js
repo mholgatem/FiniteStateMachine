@@ -393,6 +393,7 @@ function ensureTransitionTableStructure() {
     { key: 'row_index', label: '#', type: 'rowIndex' },
     { key: 'spacer_0', label: '', type: 'spacer' },
     ...stateBitCols,
+    { key: 'spacer_state_inputs', label: '|', type: 'spacer' },
     ...inputCols,
     { key: 'spacer_1', label: '', type: 'spacer' },
     ...nextStateBitCols,
@@ -986,7 +987,9 @@ function loadState(data) {
   selectedStateId = null;
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
+  tablePanel.classList.add('collapsed');
   updateControls();
+  toggleTableBtn.textContent = '▾';
   renderTable();
   renderPalette();
   renderTransitionTable();
@@ -1745,6 +1748,11 @@ function attachEvents() {
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      const activeEl = document.activeElement;
+      const tablesHaveFocus =
+        (tablePanel && tablePanel.contains(activeEl)) ||
+        (transitionDrawer && transitionDrawer.contains(activeEl));
+      if (tablesHaveFocus) return;
       undoLastDelete();
     }
   });
