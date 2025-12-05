@@ -894,7 +894,7 @@ async function captureTransitionDrawerImage() {
   wrapper.style.position = 'fixed';
   wrapper.style.left = '0';
   wrapper.style.top = '0';
-  wrapper.style.visibility = 'hidden';
+  wrapper.style.opacity = '0';
   wrapper.style.pointerEvents = 'none';
   wrapper.style.zIndex = '9999';
   wrapper.appendChild(clone);
@@ -910,7 +910,7 @@ async function captureTransitionDrawerImage() {
     height,
     scale: window.devicePixelRatio || 1,
     useCORS: true,
-    backgroundColor: null,
+    backgroundColor: '#fff',
   });
 
   const url = canvas.toDataURL('image/png');
