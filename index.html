@@ -41,8 +41,8 @@
         </select>
       </div>
       <div class="form-row">
-        <label>Number of States (max 32)</label>
-        <input type="number" id="stateCount" min="1" max="32" value="4" />
+        <label>Number of States</label>
+        <select id="stateCount"></select>
       </div>
       <div class="form-row">
         <label>Input variables (comma separated)</label>
@@ -119,7 +119,7 @@
         </div>
         <div class="form-row inline">
           <label>States</label>
-          <input type="number" id="stateControl" min="1" max="32" />
+          <select id="stateControl"></select>
         </div>
         <div class="form-row inline">
           <label>Inputs</label>
@@ -154,7 +154,7 @@
       <div id="paletteList"></div>
     </aside>
     <section class="playmat">
-      <div class="version-label">v1.6</div>
+      <div class="version-label">v1.7</div>
       <svg id="diagram" width="100%" height="100%">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
