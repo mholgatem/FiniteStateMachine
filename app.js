@@ -815,6 +815,11 @@ function captureImage(element, filename) {
   const maxDimension = 2500;
   const scale = Math.min(1, maxDimension / Math.max(width, height, 1));
 
+  tempStyle(element, { width: `${width}px`, height: `${height}px` });
+  if (scrollableChild) {
+    tempStyle(scrollableChild, { width: `${width}px`, height: `${height}px` });
+  }
+
   html2canvas(element, {
     backgroundColor: captureBg,
     width,
