@@ -797,13 +797,21 @@ function captureImage(element, filename) {
   shadowedNodes.forEach((node) => tempStyle(node, { boxShadow: 'none' }));
 
   tempStyle(element, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
-  const scrollableChild = element.querySelector('.table-wrapper');
+  const scrollableChild = element.querySelector('.table-wrapper, .drawer-table-wrapper');
   if (scrollableChild) {
     tempStyle(scrollableChild, { overflow: 'visible', maxHeight: 'none', height: 'auto' });
   }
 
-  const width = element.scrollWidth || element.clientWidth || 0;
-  const height = element.scrollHeight || element.clientHeight || 0;
+  const width = Math.max(
+    element.scrollWidth || element.clientWidth || 0,
+    scrollableChild ? scrollableChild.scrollWidth || 0 : 0,
+    element.offsetWidth || 0,
+  );
+  const height = Math.max(
+    element.scrollHeight || element.clientHeight || 0,
+    scrollableChild ? scrollableChild.scrollHeight || 0 : 0,
+    element.offsetHeight || 0,
+  );
   const maxDimension = 2500;
   const scale = Math.min(1, maxDimension / Math.max(width, height, 1));
 
