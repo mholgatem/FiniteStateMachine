@@ -596,8 +596,8 @@ function stateBinaryCode(stateId, bitCount) {
 
 function expectedOutputsForTransition(tr) {
   if (state.type === 'moore') {
-    const target = state.states.find((s) => s.id === tr.to);
-    return normalizeBitArray(target ? target.outputs : [], state.outputs.length);
+    const source = state.states.find((s) => s.id === tr.from);
+    return normalizeBitArray(source ? source.outputs : [], state.outputs.length);
   }
   normalizeTransition(tr);
   return normalizeBitArray(tr.outputValues, state.outputs.length);
@@ -624,11 +624,21 @@ function buildDiagramExpectations() {
       const key = `${tr.from}|${combo || 'none'}`;
       const existing = expectations.get(key);
       if (!existing) {
-        expectations.set(key, { nextStateBits, outputs });
+        expectations.set(key, {
+          nextStateBits,
+          outputs,
+          stateId: tr.from,
+          inputCombo: combo || 'none',
+        });
         return;
       }
       if (!arraysCompatible(existing.nextStateBits, nextStateBits)) conflict = true;
       if (!arraysCompatible(existing.outputs, outputs)) conflict = true;
+      if (state.type === 'mealy') {
+        if (existing.stateId !== tr.from || existing.inputCombo !== (combo || 'none')) {
+          conflict = true;
+        }
+      }
     });
   });
 
