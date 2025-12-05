@@ -11,6 +11,7 @@
   --error: #f28b82;
   --drawer-width: 520px;
   --drawer-gap: 0px;
+  --cell-hider-height: 1rem;
 }
 
 body.dark {
@@ -189,7 +190,7 @@ body {
   flex: 1;
 }
 
-#transitionTable {
+#transitionTable { 
   width: 100%;
   border-collapse: collapse;
   min-width: 480px;
@@ -198,9 +199,8 @@ body {
 
 #transitionTable thead {
   position: sticky;
-  top: 0;
+  top: var(--cell-hider-height);
   z-index: 3;
-  background: var(--surface);
 }
 
 #transitionTable th,
@@ -211,11 +211,19 @@ body {
 }
 
 #transitionTable th {
-  background: var(--surface);
+  position: sticky;
+  top: var(--cell-hider-height);
+  z-index: 4;
+}
+
+#cellHider {
   position: sticky;
   top: 0;
-  z-index: 4;
-  box-shadow: 0 2px 0 var(--border);
+  height: var(--cell-hider-height);
+  width: 100%;
+  background: var(--surface);
+  z-index: 5;
+  pointer-events: none;
 }
 
 #transitionTable td input {
