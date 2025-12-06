@@ -87,6 +87,11 @@
       <button id="toggleIoMode" class="ghost">Show: Binary</button>
       <button id="toggleTheme" class="ghost">Light/Dark</button>
       <button id="toggleTransitionDrawer" class="ghost">State Transition Table</button>
+      <button id="verifyButton" class="ghost verify-btn" title="Verify transition table">
+        <span>Verify</span>
+        <span id="verifyStatusIcon" class="status-icon">✕</span>
+      </button>
+      <button id="kmapButton" class="ghost" disabled title="Your transition table must be verified first">K-maps</button>
       <div class="dropdown">
         <button id="saveImageDropdown" class="ghost dropdown-toggle">Save Image ▾</button>
         <div id="saveImageMenu" class="dropdown-menu hidden">
@@ -196,6 +201,51 @@
       </ul>
       <div class="dialog-actions">
         <button data-close="quickRefDialog">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="kmapDialog" class="dialog-backdrop hidden">
+    <div class="dialog kmap-dialog">
+      <div class="dialog-header">
+        <h2>K-maps</h2>
+        <button class="ghost" data-close="kmapDialog" aria-label="Close k-map window">✕</button>
+      </div>
+      <div class="dialog-actions">
+        <button id="createKmapBtn" class="primary">Create new k-map</button>
+      </div>
+      <div id="kmapList" class="kmap-list"></div>
+    </div>
+  </div>
+
+  <div id="kmapCreatorDialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <h2>New K-map</h2>
+      <div class="form-row">
+        <label for="kmapLabelInput">K-map label</label>
+        <input type="text" id="kmapLabelInput" placeholder="Y" />
+      </div>
+      <div class="form-row">
+        <label for="kmapVariablesInput">Map Variables (2 min, 6 max, comma separated)</label>
+        <input type="text" id="kmapVariablesInput" placeholder="A, B, C" />
+      </div>
+      <div class="form-row">
+        <label for="kmapTypeSelect">Map type</label>
+        <select id="kmapTypeSelect">
+          <option value="SOP">SOP</option>
+          <option value="POS">POS</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="kmapDirectionSelect">Map direction</label>
+        <select id="kmapDirectionSelect">
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select>
+      </div>
+      <div class="dialog-actions">
+        <button id="confirmCreateKmap" class="primary" disabled>OK</button>
+        <button data-close="kmapCreatorDialog">Cancel</button>
       </div>
     </div>
   </div>

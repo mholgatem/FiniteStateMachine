@@ -8,6 +8,8 @@ const state = {
   transitions: [],
   showBinary: true,
   transitionTable: { cells: {} },
+  transitionVerified: false,
+  kmaps: [],
 };
 
 let currentArrow = null;
@@ -46,6 +48,17 @@ const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
 const toolbarNewMachine = document.getElementById('toolbarNewMachine');
+const verifyButton = document.getElementById('verifyButton');
+const verifyStatusIcon = document.getElementById('verifyStatusIcon');
+const kmapButton = document.getElementById('kmapButton');
+const kmapDialog = document.getElementById('kmapDialog');
+const kmapList = document.getElementById('kmapList');
+const createKmapBtn = document.getElementById('createKmapBtn');
+const kmapLabelInput = document.getElementById('kmapLabelInput');
+const kmapVariablesInput = document.getElementById('kmapVariablesInput');
+const kmapTypeSelect = document.getElementById('kmapTypeSelect');
+const kmapDirectionSelect = document.getElementById('kmapDirectionSelect');
+const confirmCreateKmap = document.getElementById('confirmCreateKmap');
 
 function closeDialog(id) {
   document.getElementById(id).classList.add('hidden');
@@ -61,6 +74,11 @@ function markDirty() {
 
 function clearDirty() {
   unsavedChanges = false;
+}
+
+function invalidateVerification() {
+  state.transitionVerified = false;
+  updateVerificationUI();
 }
 
 function promptToSaveIfDirty(next) {
@@ -244,6 +262,8 @@ function initStates() {
   }));
   state.transitions = [];
   state.transitionTable = { cells: {} };
+  state.transitionVerified = false;
+  state.kmaps = [];
 }
 
 function updateControls() {
@@ -264,6 +284,7 @@ function updateControls() {
   });
   toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
   toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
+  updateVerificationUI();
 }
 
 function renderPalette() {
@@ -385,6 +406,113 @@ function hasTransitionTableValues() {
   return Object.values(state.transitionTable.cells).some((val) => (val ?? '').toString().trim());
 }
 
+function verifyTransitionTableCompleteness() {
+  ensureTransitionTableStructure();
+  if (!state.transitionTable || !state.transitionTable.cells) return false;
+  const requiredKeys = [];
+  state.transitionTable.rows.forEach((row) => {
+    transitionTableValueColumns.forEach((col) => requiredKeys.push(`${row.key}::${col.key}`));
+  });
+
+  if (!requiredKeys.length) return false;
+
+  return requiredKeys.every((key) => {
+    const val = (state.transitionTable.cells?.[key] || '').toString().toUpperCase();
+    return ['0', '1', 'X'].includes(val);
+  });
+}
+
+function updateKmapButtonState() {
+  kmapButton.disabled = !state.transitionVerified;
+  kmapButton.title = state.transitionVerified
+    ? 'Open K-maps'
+    : 'Your transition table must be verified first';
+}
+
+function updateVerificationUI() {
+  verifyStatusIcon.classList.toggle('success', state.transitionVerified);
+  verifyStatusIcon.textContent = state.transitionVerified ? '✓' : '✕';
+  verifyStatusIcon.title = state.transitionVerified ? 'Verified' : 'Not verified';
+  updateKmapButtonState();
+}
+
+function setVerificationStatus(passed) {
+  const changed = state.transitionVerified !== passed;
+  state.transitionVerified = passed;
+  updateVerificationUI();
+  if (changed) markDirty();
+}
+
+function grayCodes(bits) {
+  if (bits <= 0) return [''];
+  let codes = ['0', '1'];
+  for (let i = 2; i <= bits; i += 1) {
+    const reversed = [...codes].reverse();
+    codes = codes.map((c) => `0${c}`).concat(reversed.map((c) => `1${c}`));
+  }
+  return codes;
+}
+
+function splitVariablesForGrid(vars, direction) {
+  if (!vars.length) return { rowVars: [], colVars: [] };
+  const primaryCount = vars.length === 1 ? 1 : Math.ceil(vars.length / 2);
+  if (direction === 'horizontal') {
+    const colVars = vars.slice(0, primaryCount);
+    const rowVars = vars.slice(primaryCount);
+    if (!rowVars.length && colVars.length > 1) rowVars.push(colVars.pop());
+    return { rowVars, colVars };
+  }
+  const rowVars = vars.slice(0, primaryCount);
+  const colVars = vars.slice(primaryCount);
+  if (!colVars.length && rowVars.length > 1) colVars.push(rowVars.pop());
+  return { rowVars, colVars };
+}
+
+function buildLayerLabel(layerVars, code) {
+  if (!layerVars.length) return 'Main map';
+  const paddedCode = code.padEnd(layerVars.length, '0');
+  return layerVars
+    .map((name, idx) => `${name}=${paddedCode[idx] || '0'}`)
+    .join(', ');
+}
+
+function normalizeKmap(kmap, idx = 0) {
+  const variables = normalizeNames(Array.isArray(kmap.variables) ? kmap.variables : parseList(kmap.variables || ''))
+    .slice(0, 6);
+  const mapType = kmap.mapType === 'POS' ? 'POS' : 'SOP';
+  const direction = kmap.direction === 'vertical' ? 'vertical' : 'horizontal';
+  const label = kmap.label || `K-map ${idx + 1}`;
+  const gridVars = variables.slice(0, Math.min(4, variables.length));
+  const layerVars = variables.slice(gridVars.length);
+  const { rowVars, colVars } = splitVariablesForGrid(gridVars, direction);
+  const rowCount = Math.max(1, 2 ** rowVars.length);
+  const colCount = Math.max(1, 2 ** colVars.length);
+  const layerCodes = grayCodes(layerVars.length);
+
+  const layers = layerCodes.map((code, layerIdx) => {
+    const existingLayer = (kmap.layers && kmap.layers[layerIdx]) || {};
+    const baseCells = existingLayer.cells || existingLayer || [];
+    const cells = Array.from({ length: rowCount }, (_, r) => {
+      const row = Array.isArray(baseCells[r]) ? baseCells[r] : [];
+      return Array.from({ length: colCount }, (_, c) => (row[c] || '').toString().toUpperCase());
+    });
+    return { code, cells };
+  });
+
+  return {
+    id: kmap.id || `kmap-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    label,
+    variables,
+    mapType,
+    direction,
+    rowVars,
+    colVars,
+    layerVars,
+    layers,
+    equation: kmap.equation || '',
+  };
+}
+
 function confirmTransitionTableReset(kind) {
   if (!hasTransitionTableValues()) return true;
   return window.confirm(`Changing the number of ${kind} will reset your transition table, proceed?`);
@@ -451,6 +579,140 @@ function renderTransitionTable() {
       transitionTableBody.appendChild(spacerRow);
     }
   });
+}
+
+function buildKmapGrid(kmap, layer, layerIndex) {
+  const rowCodes = grayCodes(kmap.rowVars.length);
+  const colCodes = grayCodes(kmap.colVars.length);
+  const grid = document.createElement('div');
+  grid.classList.add('kmap-grid');
+  grid.dataset.kmapId = kmap.id;
+  grid.dataset.layerIndex = layerIndex;
+
+  const header = document.createElement('div');
+  header.classList.add('kmap-grid-header');
+  const layerTitle = document.createElement('div');
+  layerTitle.textContent = buildLayerLabel(kmap.layerVars, layer.code || '');
+  header.appendChild(layerTitle);
+
+  const axisTitle = document.createElement('div');
+  axisTitle.classList.add('kmap-axis-title');
+  axisTitle.innerHTML = `${escapeHtml(kmap.rowVars.join('')) || '-'} <span>vs</span> ${escapeHtml(
+    kmap.colVars.join(''),
+  ) || '-'}`;
+  header.appendChild(axisTitle);
+  grid.appendChild(header);
+
+  const table = document.createElement('table');
+  const headRow = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.textContent = kmap.rowVars.join('') || 'Rows';
+  headRow.appendChild(corner);
+  colCodes.forEach((code) => {
+    const th = document.createElement('th');
+    th.textContent = code;
+    headRow.appendChild(th);
+  });
+  table.appendChild(headRow);
+
+  rowCodes.forEach((rowCode, rowIdx) => {
+    const tr = document.createElement('tr');
+    const rowLabel = document.createElement('th');
+    rowLabel.textContent = rowCode;
+    tr.appendChild(rowLabel);
+    colCodes.forEach((colCode, colIdx) => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = layer.cells?.[rowIdx]?.[colIdx] || '';
+      input.dataset.kmapId = kmap.id;
+      input.dataset.layerIndex = layerIndex;
+      input.dataset.rowIndex = rowIdx;
+      input.dataset.colIndex = colIdx;
+      input.dataset.rowCount = rowCodes.length;
+      input.dataset.colCount = colCodes.length;
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+
+  grid.appendChild(table);
+  return grid;
+}
+
+function renderKmaps() {
+  kmapList.innerHTML = '';
+  state.kmaps.forEach((kmap) => {
+    const card = document.createElement('div');
+    card.classList.add('kmap-card');
+    card.dataset.kmapId = kmap.id;
+
+    const title = document.createElement('h3');
+    title.textContent = kmap.label;
+    card.appendChild(title);
+
+    const meta = document.createElement('div');
+    meta.classList.add('kmap-meta');
+    meta.innerHTML = `Vars: ${escapeHtml(kmap.variables.join(', ') || 'N/A')} · Type: ${kmap.mapType} · Direction: ${
+      kmap.direction === 'vertical' ? 'Vertical' : 'Horizontal'
+    }`;
+    card.appendChild(meta);
+
+    const layerGrid = document.createElement('div');
+    layerGrid.classList.add('kmap-layer-grid');
+    const columns = kmap.layerVars.length === 0 ? 1 : 2;
+    layerGrid.style.gridTemplateColumns = `repeat(${columns}, minmax(260px, 1fr))`;
+    kmap.layers.forEach((layer, idx) => {
+      const grid = buildKmapGrid(kmap, layer, idx);
+      layerGrid.appendChild(grid);
+    });
+    card.appendChild(layerGrid);
+
+    const equationRow = document.createElement('div');
+    equationRow.classList.add('kmap-equation-row');
+    const sigmaPi = kmap.mapType === 'POS' ? 'Π' : 'Σ';
+    const label = document.createElement('span');
+    label.textContent = `${kmap.label} (${sigmaPi}) =`;
+    const eqInput = document.createElement('input');
+    eqInput.type = 'text';
+    eqInput.value = kmap.equation || '';
+    eqInput.dataset.kmapId = kmap.id;
+    eqInput.classList.add('kmap-equation-input');
+    const verifyBtn = document.createElement('button');
+    verifyBtn.textContent = 'Verify';
+    verifyBtn.disabled = true;
+    verifyBtn.classList.add('ghost');
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove K-map';
+    removeBtn.dataset.action = 'remove-kmap';
+    removeBtn.dataset.kmapId = kmap.id;
+
+    equationRow.appendChild(label);
+    equationRow.appendChild(eqInput);
+    equationRow.appendChild(verifyBtn);
+    equationRow.appendChild(removeBtn);
+    card.appendChild(equationRow);
+
+    kmapList.appendChild(card);
+  });
+}
+
+function resetKmapForm() {
+  kmapLabelInput.value = '';
+  kmapVariablesInput.value = '';
+  kmapTypeSelect.value = 'SOP';
+  kmapDirectionSelect.value = 'horizontal';
+  confirmCreateKmap.disabled = true;
+}
+
+function kmapFormIsValid() {
+  const vars = parseList(kmapVariablesInput.value || '');
+  return (kmapLabelInput.value || '').trim() && vars.length >= 2 && vars.length <= 6;
+}
+
+function updateKmapFormState() {
+  confirmCreateKmap.disabled = !kmapFormIsValid();
 }
 
 function clearDiagram() {
@@ -746,17 +1008,21 @@ function saveState() {
 
 function loadState(data) {
   const savedShowBinary = data.showBinary;
+  const savedVerification = !!data.transitionVerified;
   Object.assign(state, data);
   state.inputs = normalizeNames(state.inputs || []);
   state.outputs = normalizeNames(state.outputs || []);
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
+  state.kmaps = (data.kmaps || []).map((kmap, idx) => normalizeKmap(kmap, idx));
+  state.transitionVerified = savedVerification && verifyTransitionTableCompleteness();
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
   updateControls();
   renderTable();
   renderPalette();
   renderTransitionTable();
+  renderKmaps();
   renderDiagram();
   clearDirty();
 }
@@ -977,6 +1243,7 @@ function attachEvents() {
     renderTable();
     renderPalette();
     renderTransitionTable();
+    renderKmaps();
     renderDiagram();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
@@ -1071,6 +1338,51 @@ function attachEvents() {
     document.body.classList.toggle('light');
   });
 
+  verifyButton.addEventListener('click', () => {
+    const passed = verifyTransitionTableCompleteness();
+    setVerificationStatus(passed);
+    if (!passed) {
+      window.alert('Transition table verification failed. Please fill all cells with 0, 1, or X.');
+    }
+  });
+
+  kmapButton.addEventListener('click', () => {
+    if (kmapButton.disabled) return;
+    renderKmaps();
+    openDialog('kmapDialog');
+  });
+
+  createKmapBtn.addEventListener('click', () => {
+    resetKmapForm();
+    openDialog('kmapCreatorDialog');
+  });
+
+  kmapLabelInput.addEventListener('input', updateKmapFormState);
+  kmapVariablesInput.addEventListener('input', updateKmapFormState);
+
+  confirmCreateKmap.addEventListener('click', () => {
+    if (confirmCreateKmap.disabled) return;
+    const variables = parseList(kmapVariablesInput.value);
+    if (variables.length < 2 || variables.length > 6) {
+      window.alert('Please enter between 2 and 6 variables.');
+      return;
+    }
+    const newKmap = normalizeKmap(
+      {
+        label: kmapLabelInput.value.trim(),
+        variables,
+        mapType: kmapTypeSelect.value,
+        direction: kmapDirectionSelect.value,
+        layers: [],
+      },
+      state.kmaps.length,
+    );
+    state.kmaps.push(newKmap);
+    renderKmaps();
+    closeDialog('kmapCreatorDialog');
+    markDirty();
+  });
+
   document.getElementById('nameControl').addEventListener('input', (e) => {
     state.name = e.target.value;
     toolbarTitle.textContent = state.name;
@@ -1097,6 +1409,7 @@ function attachEvents() {
     });
     renderDiagram();
     renderTransitionTable();
+    invalidateVerification();
     markDirty();
   });
 
@@ -1123,6 +1436,7 @@ function attachEvents() {
     renderPalette();
     renderDiagram();
     renderTransitionTable();
+    invalidateVerification();
     markDirty();
   });
 
@@ -1132,6 +1446,7 @@ function attachEvents() {
     renderTable();
     renderDiagram();
     renderPalette();
+    invalidateVerification();
     markDirty();
   });
 
@@ -1149,6 +1464,7 @@ function attachEvents() {
       renderPalette();
       renderDiagram();
       renderTransitionTable();
+      invalidateVerification();
       markDirty();
     }
   });
@@ -1180,6 +1496,7 @@ function attachEvents() {
     target.value = val;
     if (!state.transitionTable || !state.transitionTable.cells) state.transitionTable = { cells: {} };
     state.transitionTable.cells[`${rowKey}::${colKey}`] = val;
+    invalidateVerification();
     markDirty();
   });
 
@@ -1214,6 +1531,72 @@ function attachEvents() {
       nextInput.focus();
       nextInput.select();
       e.preventDefault();
+    }
+  });
+
+  kmapList.addEventListener('input', (e) => {
+    const target = e.target;
+    if (target.classList.contains('kmap-equation-input')) {
+      const kmap = state.kmaps.find((k) => k.id === target.dataset.kmapId);
+      if (!kmap) return;
+      kmap.equation = target.value;
+      markDirty();
+      return;
+    }
+    if (target.tagName !== 'INPUT' || !target.dataset.kmapId || target.dataset.rowIndex === undefined) return;
+    let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+    if (val.length > 1) val = val[0];
+    target.value = val;
+    const kmap = state.kmaps.find((k) => k.id === target.dataset.kmapId);
+    if (!kmap) return;
+    const layerIdx = parseInt(target.dataset.layerIndex, 10);
+    const rowIdx = parseInt(target.dataset.rowIndex, 10);
+    const colIdx = parseInt(target.dataset.colIndex, 10);
+    if (Number.isNaN(layerIdx) || Number.isNaN(rowIdx) || Number.isNaN(colIdx)) return;
+    const layer = kmap.layers[layerIdx];
+    if (!layer || !layer.cells[rowIdx]) return;
+    layer.cells[rowIdx][colIdx] = val;
+    markDirty();
+  });
+
+  kmapList.addEventListener('focusin', (e) => {
+    if (e.target.tagName === 'INPUT') {
+      e.target.select();
+    }
+  });
+
+  kmapList.addEventListener('keydown', (e) => {
+    const target = e.target;
+    if (target.tagName !== 'INPUT' || target.dataset.rowIndex === undefined) return;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    const rowIdx = parseInt(target.dataset.rowIndex, 10);
+    const colIdx = parseInt(target.dataset.colIndex, 10);
+    const rowCount = parseInt(target.dataset.rowCount, 10);
+    const colCount = parseInt(target.dataset.colCount, 10);
+    if ([rowIdx, colIdx, rowCount, colCount].some((v) => Number.isNaN(v))) return;
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+    if (e.key === 'ArrowLeft') nextCol = Math.max(0, colIdx - 1);
+    if (e.key === 'ArrowRight') nextCol = Math.min(colCount - 1, colIdx + 1);
+    if (e.key === 'ArrowUp') nextRow = Math.max(0, rowIdx - 1);
+    if (e.key === 'ArrowDown') nextRow = Math.min(rowCount - 1, rowIdx + 1);
+    const selector = `input[data-kmap-id="${target.dataset.kmapId}"][data-layer-index="${
+      target.dataset.layerIndex
+    }"][data-row-index="${nextRow}"][data-col-index="${nextCol}"]`;
+    const nextInput = kmapList.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+      e.preventDefault();
+    }
+  });
+
+  kmapList.addEventListener('click', (e) => {
+    const { action, kmapId } = e.target.dataset || {};
+    if (action === 'remove-kmap' && kmapId) {
+      state.kmaps = state.kmaps.filter((k) => k.id !== kmapId);
+      renderKmaps();
+      markDirty();
     }
   });
 
@@ -1501,6 +1884,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTable();
   renderTransitionTable();
   renderPalette();
+  renderKmaps();
   applyViewTransform();
   renderDiagram();
 });

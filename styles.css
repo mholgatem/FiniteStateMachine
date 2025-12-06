@@ -62,6 +62,21 @@ body {
   align-items: center;
 }
 
+.verify-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.status-icon {
+  font-weight: 800;
+  color: var(--error);
+}
+
+.status-icon.success {
+  color: #1aa86f;
+}
+
 .dropdown {
   position: relative;
 }
@@ -428,6 +443,14 @@ button:active {
   flex-wrap: wrap;
 }
 
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;
@@ -583,6 +606,114 @@ svg text {
 
 .hidden {
   display: none;
+}
+
+.kmap-dialog {
+  max-width: 1024px;
+  width: min(92vw, 1040px);
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.kmap-list {
+  overflow: auto;
+  padding: 0.5rem 0.25rem 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.kmap-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+}
+
+.kmap-card h3 {
+  margin: 0 0 0.35rem;
+}
+
+.kmap-meta {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+.kmap-layer-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.kmap-grid {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--accent);
+}
+
+.kmap-grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.kmap-grid table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+
+.kmap-grid th,
+.kmap-grid td {
+  border: 1px solid var(--border);
+  text-align: center;
+  padding: 0.35rem;
+}
+
+.kmap-grid th {
+  background: var(--accent);
+}
+
+.kmap-axis-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.kmap-grid input {
+  width: 38px;
+  text-align: center;
+}
+
+.kmap-equation-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.kmap-equation-row input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.kmap-actions-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
 }
 
 #landing h1 {
