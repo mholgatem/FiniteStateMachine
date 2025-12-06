@@ -12,9 +12,10 @@ const state = {
 
 let currentArrow = null;
 let selectedArrowId = null;
+let selectedStateId = null;
 let arrowDialogTarget = null;
 let previewPath = null;
-let deletedTransitions = [];
+let undoStack = [];
 let viewState = { scale: 1, panX: 0, panY: 0 };
 let unsavedChanges = false;
 let drawerWidth = 520;
@@ -46,6 +47,28 @@ const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
 const toolbarNewMachine = document.getElementById('toolbarNewMachine');
+const allowedStateCounts = [1, 2, 4, 8, 16, 32];
+
+function coerceAllowedStateCount(value) {
+  const num = parseInt(value, 10);
+  if (allowedStateCounts.includes(num)) return num;
+  return allowedStateCounts[0];
+}
+
+function populateStateCountSelectors() {
+  const selectors = [document.getElementById('stateCount'), document.getElementById('stateControl')];
+  selectors.forEach((sel) => {
+    if (!sel || sel.dataset.populated) return;
+    sel.innerHTML = '';
+    allowedStateCounts.forEach((count) => {
+      const opt = document.createElement('option');
+      opt.value = count;
+      opt.textContent = count;
+      sel.appendChild(opt);
+    });
+    sel.dataset.populated = 'true';
+  });
+}
 
 function closeDialog(id) {
   document.getElementById(id).classList.add('hidden');
@@ -55,8 +78,31 @@ function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
+function clearVerificationStatus() {
+  const verifyBtn = document.getElementById('verifyTransitionTable');
+  if (verifyBtn) verifyBtn.classList.remove('verified');
+}
+
+function diagramHasHighlightedStates() {
+  return state.states.some((st) => {
+    if (!st.placed) return false;
+    const coverage = evaluateCoverage(st.id);
+    return coverage.missing || coverage.overfull;
+  });
+}
+
+function updateVerifyButtonState() {
+  const verifyBtn = document.getElementById('verifyTransitionTable');
+  if (!verifyBtn) return;
+  const hasErrors = diagramHasHighlightedStates();
+  verifyBtn.disabled = hasErrors;
+  if (hasErrors) verifyBtn.classList.remove('verified');
+}
+
 function markDirty() {
   unsavedChanges = true;
+  clearVerificationStatus();
+  updateVerifyButtonState();
 }
 
 function clearDirty() {
@@ -244,6 +290,9 @@ function initStates() {
   }));
   state.transitions = [];
   state.transitionTable = { cells: {} };
+  undoStack = [];
+  selectedArrowId = null;
+  selectedStateId = null;
 }
 
 function updateControls() {
@@ -344,6 +393,7 @@ function ensureTransitionTableStructure() {
     { key: 'row_index', label: '#', type: 'rowIndex' },
     { key: 'spacer_0', label: '', type: 'spacer' },
     ...stateBitCols,
+    { key: 'spacer_state_inputs', label: '', type: 'spacer' },
     ...inputCols,
     { key: 'spacer_1', label: '', type: 'spacer' },
     ...nextStateBitCols,
@@ -451,6 +501,8 @@ function renderTransitionTable() {
       transitionTableBody.appendChild(spacerRow);
     }
   });
+
+  updateVerifyButtonState();
 }
 
 function clearDiagram() {
@@ -467,6 +519,7 @@ function renderDiagram() {
     drawState(st);
   });
   drawPreview();
+  updateVerifyButtonState();
 }
 
 function drawState(st) {
@@ -479,6 +532,9 @@ function drawState(st) {
   circle.setAttribute('cy', st.y);
   circle.setAttribute('r', st.radius);
   circle.classList.add('state-node');
+  if (selectedStateId === st.id) {
+    circle.classList.add('selected');
+  }
   const coverage = evaluateCoverage(st.id);
   if (coverage.overfull) {
     circle.classList.add('overfull');
@@ -545,6 +601,180 @@ function evaluateCoverage(stateId) {
   const missing = uniqueCombos < expected;
   const overfull = hasDuplicates || uniqueCombos > expected;
   return { missing, overfull };
+}
+
+function normalizeBinaryValue(val) {
+  if (val === undefined || val === null) return '';
+  const normalized = val.toString().toUpperCase().replace(/[^01X]/g, '');
+  return normalized ? normalized[0] : '';
+}
+
+function normalizeBitArray(values, expectedLength) {
+  const result = Array(expectedLength).fill('');
+  (values || []).forEach((val, idx) => {
+    if (idx < expectedLength) result[idx] = normalizeBinaryValue(val);
+  });
+  return result;
+}
+
+function stateBinaryCode(stateId, bitCount) {
+  const st = state.states.find((s) => s.id === stateId);
+  if (!st) return null;
+  const cleaned = (st.binary || stateId.toString(2)).replace(/[^01]/g, '');
+  return cleaned.padStart(bitCount, '0').slice(-bitCount);
+}
+
+function expectedOutputsForTransition(tr) {
+  if (state.type === 'moore') {
+    const source = state.states.find((s) => s.id === tr.from);
+    return normalizeBitArray(source ? source.outputs : [], state.outputs.length);
+  }
+  normalizeTransition(tr);
+  return normalizeBitArray(tr.outputValues, state.outputs.length);
+}
+
+function buildDiagramExpectations() {
+  const bitCount = stateBitCount();
+  const expectations = new Map();
+  let conflict = false;
+
+  state.transitions.forEach((tr) => {
+    normalizeTransition(tr);
+    const sourceBits = stateBinaryCode(tr.from, bitCount);
+    if (!sourceBits || sourceBits.length !== bitCount) {
+      conflict = true;
+      return;
+    }
+    const combos = combinationsFromValues(tr.inputValues);
+    const nextBitsStr = stateBinaryCode(tr.to, bitCount) || '';
+    const nextStateBits = normalizeBitArray(nextBitsStr.split(''), bitCount);
+    const outputs = expectedOutputsForTransition(tr);
+
+    if (!nextBitsStr || nextStateBits.some((v) => !v) || outputs.some((v) => !v)) {
+      conflict = true;
+      return;
+    }
+
+    combos.forEach((combo) => {
+      const key = `${sourceBits}|${combo || 'none'}`;
+      const existing = expectations.get(key);
+      if (!existing) {
+        expectations.set(key, {
+          nextStateBits,
+          outputs,
+          stateBits: sourceBits,
+          inputCombo: combo || 'none',
+        });
+        return;
+      }
+      if (!arraysCompatible(existing.nextStateBits, nextStateBits)) conflict = true;
+      if (!arraysCompatible(existing.outputs, outputs)) conflict = true;
+      if (state.type === 'mealy') {
+        if (existing.stateBits !== sourceBits || existing.inputCombo !== (combo || 'none')) {
+          conflict = true;
+        }
+      }
+    });
+  });
+
+  return { expectations, conflict };
+}
+
+function findStateByBits(bits) {
+  const bitCount = bits.length;
+  return state.states.find((s) => stateBinaryCode(s.id, bitCount) === bits);
+}
+
+function readTransitionTableRowValues(row, currentStateCols, inputCols, nextStateCols, outputCols) {
+  const cells = state.transitionTable?.cells || {};
+  const readVal = (colKey) => normalizeBinaryValue(cells[`${row.key}::${colKey}`]);
+  return {
+    currentStateBits: currentStateCols.map((col) => readVal(col.key)),
+    inputBits: inputCols.map((col) => readVal(col.key)),
+    nextStateBits: nextStateCols.map((col) => readVal(col.key)),
+    outputs: outputCols.map((col) => readVal(col.key)),
+  };
+}
+
+function valuesCompatible(diagramVal, tableVal) {
+  const expected = normalizeBinaryValue(diagramVal);
+  const actual = normalizeBinaryValue(tableVal);
+  if (!expected || !actual) return false;
+  if (expected === 'X' || actual === 'X') return true;
+  return expected === actual;
+}
+
+function arraysCompatible(expectedArr, actualArr) {
+  if (expectedArr.length !== actualArr.length) return false;
+  return expectedArr.every((val, idx) => valuesCompatible(val, actualArr[idx]));
+}
+
+function stateIsUsed(stateId) {
+  const st = state.states.find((s) => s.id === stateId);
+  if (!st) return false;
+  const participatesInTransition = state.transitions.some(
+    (tr) => tr.from === stateId || tr.to === stateId,
+  );
+  return st.placed || participatesInTransition;
+}
+
+function transitionTableRowIsBlank(row) {
+  const cells = state.transitionTable?.cells || {};
+  return transitionTableValueColumns.every((col) => {
+    const raw = cells[`${row.key}::${col.key}`];
+    return !normalizeBinaryValue(raw);
+  });
+}
+
+function verifyTransitionTableAgainstDiagram() {
+  ensureTransitionTableStructure();
+  const { expectations, conflict } = buildDiagramExpectations();
+
+  const currentStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('q_'));
+  const inputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('in_'));
+  const nextStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('next_q_'));
+  const outputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('out_'));
+  const bitCount = currentStateCols.length;
+
+  let matches = !conflict;
+
+  state.transitionTable.rows.forEach((row) => {
+    if (!matches) return;
+    if (transitionTableRowIsBlank(row)) return;
+    const actual = readTransitionTableRowValues(row, currentStateCols, inputCols, nextStateCols, outputCols);
+    if (actual.currentStateBits.some((v) => !v) || actual.inputBits.some((v) => !v)) {
+      matches = false;
+      return;
+    }
+    const currentStateBits = actual.currentStateBits.join('');
+    const inputBits = actual.inputBits.join('');
+    if (!currentStateBits || currentStateBits.length !== bitCount) {
+      matches = false;
+      return;
+    }
+    const matchingState = findStateByBits(currentStateBits);
+    if (matchingState && !stateIsUsed(matchingState.id)) return;
+    const expected = expectations.get(`${currentStateBits}|${inputBits || 'none'}`);
+    if (!expected) {
+      matches = false;
+      return;
+    }
+    if (!arraysCompatible(expected.nextStateBits, actual.nextStateBits)) {
+      matches = false;
+      return;
+    }
+    if (!arraysCompatible(expected.outputs, actual.outputs)) {
+      matches = false;
+    }
+  });
+
+  if (matches) {
+    const verifyBtn = document.getElementById('verifyTransitionTable');
+    if (verifyBtn) verifyBtn.classList.add('verified');
+  } else {
+    window.alert('Your state transition table does not match your state transition diagram');
+    clearVerificationStatus();
+  }
 }
 
 function endpointsForArc(from, to, arcOffset = 0) {
@@ -747,17 +977,24 @@ function saveState() {
 function loadState(data) {
   const savedShowBinary = data.showBinary;
   Object.assign(state, data);
+  state.numStates = coerceAllowedStateCount(state.numStates);
   state.inputs = normalizeNames(state.inputs || []);
   state.outputs = normalizeNames(state.outputs || []);
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
+  undoStack = [];
+  selectedArrowId = null;
+  selectedStateId = null;
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
+  tablePanel.classList.add('collapsed');
   updateControls();
+  toggleTableBtn.textContent = '▾';
   renderTable();
   renderPalette();
   renderTransitionTable();
   renderDiagram();
+  clearVerificationStatus();
   clearDirty();
 }
 
@@ -951,6 +1188,72 @@ function nearestTOnPath(path, point) {
   return closestT;
 }
 
+function cloneTransition(tr) {
+  return JSON.parse(JSON.stringify(tr));
+}
+
+function deleteStateById(stateId) {
+  const st = state.states.find((s) => s.id === stateId);
+  if (!st || !st.placed) return;
+  const removedTransitions = [];
+  state.transitions = state.transitions.filter((tr) => {
+    const shouldRemove = tr.from === stateId || tr.to === stateId;
+    if (shouldRemove) removedTransitions.push(cloneTransition(tr));
+    return !shouldRemove;
+  });
+  undoStack.push({
+    type: 'stateDeletion',
+    stateId,
+    prevState: { placed: st.placed, x: st.x, y: st.y, radius: st.radius },
+    removedTransitions,
+  });
+  st.placed = false;
+  selectedStateId = null;
+  selectedArrowId = null;
+  renderPalette();
+  renderDiagram();
+  markDirty();
+}
+
+function deleteTransitionById(transitionId) {
+  const idx = state.transitions.findIndex((t) => t.id === transitionId);
+  if (idx === -1) return;
+  const [removed] = state.transitions.splice(idx, 1);
+  if (removed) {
+    undoStack.push({ type: 'transitionDeletion', transition: cloneTransition(removed) });
+  }
+  selectedArrowId = null;
+  renderDiagram();
+  markDirty();
+}
+
+function undoLastDelete() {
+  const action = undoStack.pop();
+  if (!action) return;
+  if (action.type === 'transitionDeletion') {
+    state.transitions.push(action.transition);
+    selectedArrowId = action.transition.id;
+    renderDiagram();
+    markDirty();
+    return;
+  }
+  if (action.type === 'stateDeletion') {
+    const st = state.states.find((s) => s.id === action.stateId);
+    if (st) {
+      st.placed = action.prevState.placed;
+      st.x = action.prevState.x;
+      st.y = action.prevState.y;
+      st.radius = action.prevState.radius;
+    }
+    action.removedTransitions.forEach((tr) => state.transitions.push(tr));
+    selectedStateId = action.stateId;
+    selectedArrowId = null;
+    renderPalette();
+    renderDiagram();
+    markDirty();
+  }
+}
+
 function attachEvents() {
   updateDrawerWidth(Math.min(drawerWidth, Math.floor(window.innerWidth * 0.85)));
 
@@ -967,7 +1270,7 @@ function attachEvents() {
   document.getElementById('createMachine').addEventListener('click', () => {
     state.name = document.getElementById('machineName').value || 'Untitled Machine';
     state.type = document.getElementById('machineType').value;
-    state.numStates = Math.min(32, Math.max(1, parseInt(document.getElementById('stateCount').value, 10) || 1));
+    state.numStates = coerceAllowedStateCount(document.getElementById('stateCount').value);
     state.inputs = parseList(document.getElementById('inputVars').value);
     state.outputs = parseList(document.getElementById('outputVars').value);
     viewState = { scale: 1, panX: 0, panY: 0 };
@@ -980,6 +1283,7 @@ function attachEvents() {
     renderDiagram();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
+    clearVerificationStatus();
     clearDirty();
   });
 
@@ -1007,6 +1311,9 @@ function attachEvents() {
   });
 
   document.getElementById('toggleTransitionDrawer').addEventListener('click', toggleTransitionDrawer);
+  document
+    .getElementById('verifyTransitionTable')
+    .addEventListener('click', verifyTransitionTableAgainstDiagram);
   document.getElementById('closeTransitionDrawer').addEventListener('click', closeTransitionDrawer);
 
   transitionDrawerHandle.addEventListener('mousedown', (e) => {
@@ -1136,7 +1443,7 @@ function attachEvents() {
   });
 
   document.getElementById('stateControl').addEventListener('change', (e) => {
-    const newCount = Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1));
+    const newCount = coerceAllowedStateCount(e.target.value);
     if (newCount !== state.numStates) {
       if (!confirmTransitionTableReset('states')) {
         e.target.value = state.numStates;
@@ -1175,7 +1482,10 @@ function attachEvents() {
     const rowKey = target.dataset.rowKey;
     const colKey = target.dataset.colKey;
     if (!rowKey || !colKey) return;
-    let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+    const isCurrentStateCol = colKey.startsWith('q_');
+    const isInputCol = colKey.startsWith('in_');
+    const sanitizePattern = isCurrentStateCol || isInputCol ? /[^01]/g : /[^01X]/gi;
+    let val = (target.value || '').toUpperCase().replace(sanitizePattern, '');
     if (val.length > 1) val = val[0];
     target.value = val;
     if (!state.transitionTable || !state.transitionTable.cells) state.transitionTable = { cells: {} };
@@ -1260,13 +1570,20 @@ function attachEvents() {
     const targetState = e.target.closest('circle.state-node');
     const targetHandle = e.target.closest('circle.arc-handle');
     const targetPath = e.target.closest('path.arrow-path');
+    if (!targetLabelHandle && !targetState && !targetHandle && !targetPath) {
+      selectedArrowId = null;
+      selectedStateId = null;
+      renderDiagram();
+    }
     if (targetPath) {
       selectedArrowId = parseInt(targetPath.dataset.id, 10);
+      selectedStateId = null;
       renderDiagram();
     }
     if (targetLabelHandle) {
       const id = parseInt(targetLabelHandle.dataset.id, 10);
       selectedArrowId = id;
+      selectedStateId = null;
       renderDiagram();
       const tr = state.transitions.find((t) => t.id === id);
       if (!tr) return;
@@ -1288,6 +1605,7 @@ function attachEvents() {
     }
     if (targetHandle) {
       selectedArrowId = parseInt(targetHandle.dataset.id, 10);
+      selectedStateId = null;
       renderDiagram();
       const tr = state.transitions.find((t) => t.id === parseInt(targetHandle.dataset.id, 10));
       if (!tr) return;
@@ -1326,6 +1644,9 @@ function attachEvents() {
       const id = parseInt(targetState.parentNode.dataset.id, 10);
       const st = state.states.find((s) => s.id === id);
       if (!st) return;
+      selectedStateId = id;
+      selectedArrowId = null;
+      renderDiagram();
       const start = getSVGPoint(e.clientX, e.clientY);
       const offsetX = st.x - start.x;
       const offsetY = st.y - start.y;
@@ -1353,12 +1674,6 @@ function attachEvents() {
       const upHandler = (ev) => {
         document.removeEventListener('mousemove', moveHandler);
         document.removeEventListener('mouseup', upHandler);
-        const paletteRect = palettePane.getBoundingClientRect();
-        if (ev.clientX < paletteRect.right) {
-          st.placed = false;
-          renderPalette();
-          renderDiagram();
-        }
         if (moved) markDirty();
       };
       document.addEventListener('mousemove', moveHandler);
@@ -1422,25 +1737,23 @@ function attachEvents() {
 
   document.addEventListener('keydown', (e) => {
     const isFormElement = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
-    if (!isFormElement && (e.key === 'Backspace' || e.key === 'Delete') && selectedArrowId) {
-      const idx = state.transitions.findIndex((t) => t.id === selectedArrowId);
-      if (idx !== -1) {
-        const [removed] = state.transitions.splice(idx, 1);
-        if (removed) deletedTransitions.push(removed);
+    if (!isFormElement && (e.key === 'Backspace' || e.key === 'Delete')) {
+      if (selectedArrowId) {
+        deleteTransitionById(selectedArrowId);
+        return;
       }
-      selectedArrowId = null;
-      renderDiagram();
-      markDirty();
+      if (selectedStateId !== null) {
+        deleteStateById(selectedStateId);
+      }
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-      const restored = deletedTransitions.pop();
-      if (restored) {
-        state.transitions.push(restored);
-        selectedArrowId = restored.id;
-        renderDiagram();
-        markDirty();
-      }
+      const activeEl = document.activeElement;
+      const tablesHaveFocus =
+        (tablePanel && tablePanel.contains(activeEl)) ||
+        (transitionDrawer && transitionDrawer.contains(activeEl));
+      if (tablesHaveFocus) return;
+      undoLastDelete();
     }
   });
 
@@ -1495,6 +1808,7 @@ function getSVGPoint(clientX, clientY) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  populateStateCountSelectors();
   attachEvents();
   updateControls();
   initStates();
