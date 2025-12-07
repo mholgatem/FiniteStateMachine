@@ -1220,6 +1220,9 @@ function buildTrayToken(token) {
   btn.draggable = true;
   btn.dataset.tokenType = token.type;
   btn.dataset.tokenValue = token.value;
+  if (token.type === 'op' || token.type === 'paren') {
+    btn.classList.add('kmap-token-operator');
+  }
   btn.innerHTML = formatScriptedText(token.value || '');
   return btn;
 }

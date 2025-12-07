@@ -756,6 +756,11 @@ svg text {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
+.kmap-token-operator {
+  background: cornflowerblue;
+  color: #fff;
+}
+
 .kmap-expression-tray-wrapper {
   display: flex;
   flex-direction: column;
@@ -804,8 +809,6 @@ svg text {
 }
 .kmap-expr-token-inner {
   position: relative;
-  display: inline-flex;
-  align-items: center;
   line-height: 1.05;
 }
 
