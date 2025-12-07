@@ -1234,7 +1234,7 @@ function renderKmaps() {
     card.dataset.totalCols = layout.totalCols;
 
     const heading = document.createElement('h4');
-    heading.textContent = kmap.label || 'K-map';
+    heading.innerHTML = formatScriptedText(kmap.label || 'K-map');
     card.appendChild(heading);
 
     const meta = document.createElement('div');
@@ -1257,7 +1257,7 @@ function renderKmaps() {
       submap.style.gridRow = sub.mapRow + 1;
       const label = document.createElement('div');
       label.className = 'kmap-submap-label';
-      label.textContent = sub.label || ' ';
+      label.innerHTML = sub.label ? formatScriptedText(sub.label) : '&nbsp;';
       submap.appendChild(label);
       submap.appendChild(buildKmapTable(kmap, layout, sub));
       gridCollection.appendChild(submap);
@@ -1269,7 +1269,7 @@ function renderKmaps() {
     expressionRow.className = 'kmap-expression';
     const symbol = kmap.type === 'pos' ? 'Π' : 'Σ';
     const label = document.createElement('span');
-    label.textContent = `${kmap.label || 'K-map'} ${symbol} =`;
+    label.innerHTML = `${formatScriptedText(kmap.label || 'K-map')} ${symbol} =`;
     expressionRow.appendChild(label);
 
     const exprInput = document.createElement('input');

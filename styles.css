@@ -794,12 +794,11 @@ svg text {
 .kmap-corner-label .kmap-diagonal::before {
   content: "";
   position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  border-top: 1px solid var(--border);
-  /* adjust sign of the angle to flip direction if needed */
-  transform: rotate(45deg);
+  top: -20px;
+  left: 51%;
+  bottom: -20px;
+  border-left: 1px solid var(--border);
+  transform: rotate(-45deg);
   transform-origin: center;
 }
 
