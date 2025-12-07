@@ -61,6 +61,7 @@ const kmapDirectionInput = document.getElementById('kmapDirection');
 const kmapResizeHandle = document.getElementById('kmapResizeHandle');
 
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
+let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 
 function coerceAllowedStateCount(value) {
@@ -1283,6 +1284,7 @@ function renderKmaps() {
 
 function openKmapWindow() {
   if (!kmapWindow) return;
+  renderKmaps();
   if (kmapWindowState.left === null || kmapWindowState.top === null) {
     const centeredLeft = Math.max(12, (window.innerWidth - kmapWindowState.width) / 2);
     const centeredTop = Math.max(12, (window.innerHeight - kmapWindowState.height) / 2);
@@ -1297,15 +1299,20 @@ function openKmapWindow() {
   kmapWindow.classList.remove('hidden');
 }
 
+function showKmapWorkspace() {
+  openTransitionDrawer();
+  openKmapWindow();
+}
+
 function closeKmapWindow() {
   if (kmapWindow) kmapWindow.classList.add('hidden');
 }
 
 function resetKmapDialog() {
-  kmapLabelInput.value = '';
-  kmapVariablesInput.value = '';
-  kmapTypeInput.value = 'sop';
-  kmapDirectionInput.value = 'horizontal';
+  kmapLabelInput.value = kmapFormMemory.label || '';
+  kmapVariablesInput.value = kmapFormMemory.variables || '';
+  kmapTypeInput.value = kmapFormMemory.type || 'sop';
+  kmapDirectionInput.value = kmapFormMemory.direction || 'horizontal';
   confirmKmapCreate.disabled = true;
 }
 
@@ -1318,12 +1325,19 @@ function validateKmapDialog() {
 
 function openKmapDialog() {
   resetKmapDialog();
+  validateKmapDialog();
   openDialog('kmapCreateDialog');
 }
 
 function createKmapFromDialog() {
   const variables = parseKmapVariables(kmapVariablesInput.value);
   const label = kmapLabelInput.value.trim() || 'K-map';
+  kmapFormMemory = {
+    label,
+    variables: kmapVariablesInput.value,
+    type: kmapTypeInput.value,
+    direction: kmapDirectionInput.value,
+  };
   const newMap = {
     id: Date.now(),
     label,
@@ -1336,7 +1350,7 @@ function createKmapFromDialog() {
   state.kmaps.push(newMap);
   renderKmaps();
   closeDialog('kmapCreateDialog');
-  openKmapWindow();
+  showKmapWorkspace();
   markDirty();
 }
 
@@ -1609,7 +1623,7 @@ function attachEvents() {
   toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
   document.getElementById('kmapToggle').addEventListener('click', () => {
-    if (kmapWindow.classList.contains('hidden')) openKmapWindow();
+    if (kmapWindow.classList.contains('hidden')) showKmapWorkspace();
     else closeKmapWindow();
   });
   document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
