@@ -729,6 +729,96 @@ svg text {
   gap: 0.5rem;
 }
 
+.kmap-variable-tray {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.kmap-tray-label {
+  font-weight: 600;
+}
+
+.kmap-variable-items {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.kmap-token {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.kmap-expression-tray-wrapper {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.kmap-expression-tray {
+  min-width: 280px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  cursor: text;
+  background: var(--surface);
+}
+
+.kmap-expression-tray:focus {
+  outline: 2px solid var(--accent);
+}
+
+.kmap-expr-placeholder {
+  color: var(--muted, #6b7280);
+  font-size: 0.95rem;
+}
+
+.kmap-expr-token {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 0.4rem;
+  background: var(--surface);
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  display: inline-flex;
+  align-items: center;
+}
+
+.kmap-expr-token.selected {
+  outline: 2px solid var(--accent);
+}
+
+.kmap-expr-token-inner.negated {
+  border-top: 2px solid currentColor;
+  padding-top: 2px;
+}
+
+.kmap-expression-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kmap-drop-marker {
+  width: 2px;
+  height: 24px;
+  background: var(--accent);
+  align-self: stretch;
+}
+
 .kmap-meta {
   display: flex;
   gap: 0.75rem;

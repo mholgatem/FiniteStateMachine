@@ -62,6 +62,7 @@ const kmapResizeHandle = document.getElementById('kmapResizeHandle');
 
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
 let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
+let kmapExpressionDragState = null;
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 
 function coerceAllowedStateCount(value) {
@@ -1201,6 +1202,84 @@ function tokensToCanonical(tokens) {
   return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
+function expressionStringToTokens(raw) {
+  const normalized = normalizeExpressionTokens(raw || '');
+  return normalized
+    .filter((tk) => tk.type === 'var' || tk.type === 'op' || tk.type === 'paren')
+    .map((tk) => ({
+      type: tk.type,
+      value: tk.value,
+      negated: tk.negated || false,
+    }));
+}
+
+function buildTrayToken(token) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'kmap-token';
+  btn.draggable = true;
+  btn.dataset.tokenType = token.type;
+  btn.dataset.tokenValue = token.value;
+  btn.innerHTML = formatScriptedText(token.value || '');
+  return btn;
+}
+
+function renderExpressionToken(token, index, kmapId) {
+  const el = document.createElement('div');
+  el.className = 'kmap-expr-token';
+  el.draggable = true;
+  el.dataset.tokenType = token.type;
+  el.dataset.tokenValue = token.value;
+  el.dataset.index = index;
+  el.dataset.kmapId = kmapId;
+  const inner = document.createElement('span');
+  inner.className = 'kmap-expr-token-inner';
+  if (token.type === 'var') {
+    inner.classList.toggle('negated', !!token.negated);
+  }
+  inner.innerHTML = formatScriptedText(token.value || '');
+  el.appendChild(inner);
+  return el;
+}
+
+function renderExpressionTray(tray, tokens, kmapId) {
+  tray.innerHTML = '';
+  if (!tokens.length) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'kmap-expr-placeholder';
+    placeholder.textContent = 'Drag items here to build your expression';
+    tray.appendChild(placeholder);
+    return;
+  }
+  tokens.forEach((tk, idx) => {
+    tray.appendChild(renderExpressionToken(tk, idx, kmapId));
+  });
+}
+
+function ensureDropMarker(tray) {
+  let marker = tray.querySelector('.kmap-drop-marker');
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.className = 'kmap-drop-marker';
+  }
+  return marker;
+}
+
+function clearDropMarker(tray) {
+  const marker = tray.querySelector('.kmap-drop-marker');
+  if (marker) marker.remove();
+}
+
+function updateKmapExpressionTokens(kmap, tokens, tray) {
+  kmap.expressionTokens = tokens;
+  kmap.expression = tokensToCanonical(tokens) || '';
+  if (tray) renderExpressionTray(tray, tokens, kmap.id);
+}
+
+function getKmapById(id) {
+  return state.kmaps.find((m) => m.id.toString() === id.toString());
+}
+
 function tokensToDisplay(tokens) {
   const parts = [];
   let prevType = null;
@@ -1562,7 +1641,10 @@ function buildKmapTruthTable(kmap) {
 function verifyKmapExpression(kmap) {
   if (!kmap) return { passed: false, reason: 'No k-map selected' };
   const kmapTable = buildKmapTruthTable(kmap);
-  const canonical = tokensToCanonical(normalizeExpressionTokens(kmap.expression || ''));
+  const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+  const canonical = tokensToCanonical(tokens);
+  kmap.expression = canonical;
+  kmap.expressionTokens = tokens;
   const exprTable = buildExpressionTruthTable(canonical, kmapTable.variables);
   if (!exprTable) return { passed: false, reason: 'Expression is invalid or empty' };
   for (const [key, value] of kmapTable.table.entries()) {
@@ -1780,23 +1862,50 @@ function renderKmaps() {
     label.innerHTML = `${formatScriptedText(kmap.label || 'K-map')} ${symbol} =`;
     expressionRow.appendChild(label);
 
-    const exprInput = document.createElement('div');
-    exprInput.contentEditable = 'true';
-    exprInput.dataset.kmapId = kmap.id;
-    exprInput.classList.add('kmap-expression-input');
-    exprInput.innerHTML = renderExpressionHtml(kmap.expression || '');
-    expressionRow.appendChild(exprInput);
+    const variableTray = document.createElement('div');
+    variableTray.className = 'kmap-variable-tray';
+    const trayLabel = document.createElement('span');
+    trayLabel.className = 'kmap-tray-label';
+    trayLabel.textContent = 'Variables';
+    variableTray.appendChild(trayLabel);
+    const trayItems = document.createElement('div');
+    trayItems.className = 'kmap-variable-items';
+    const tokens = kmap.variables?.length ? kmap.variables : ['—'];
+    tokens.forEach((name) => {
+      trayItems.appendChild(buildTrayToken({ type: 'var', value: name }));
+    });
+    ['+', '*', '(', ')'].forEach((op) => {
+      trayItems.appendChild(buildTrayToken({ type: op === '(' || op === ')' ? 'paren' : 'op', value: op }));
+    });
+    variableTray.appendChild(trayItems);
+    expressionRow.appendChild(variableTray);
 
+    const exprTrayWrapper = document.createElement('div');
+    exprTrayWrapper.className = 'kmap-expression-tray-wrapper';
+    const exprTray = document.createElement('div');
+    exprTray.className = 'kmap-expression-tray';
+    exprTray.tabIndex = 0;
+    exprTray.dataset.kmapId = kmap.id;
+    const parsedTokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+    kmap.expressionTokens = parsedTokens;
+    renderExpressionTray(exprTray, parsedTokens, kmap.id);
+    exprTrayWrapper.appendChild(exprTray);
+
+    const controls = document.createElement('div');
+    controls.className = 'kmap-expression-actions';
     const verifyBtn = document.createElement('button');
     verifyBtn.textContent = 'Verify';
     verifyBtn.type = 'button';
     verifyBtn.dataset.verifyKmap = kmap.id;
-    expressionRow.appendChild(verifyBtn);
+    controls.appendChild(verifyBtn);
 
     const removeBtn = document.createElement('button');
     removeBtn.textContent = 'Remove K-map';
     removeBtn.dataset.removeKmap = kmap.id;
-    expressionRow.appendChild(removeBtn);
+    controls.appendChild(removeBtn);
+
+    exprTrayWrapper.appendChild(controls);
+    expressionRow.appendChild(exprTrayWrapper);
 
     card.appendChild(expressionRow);
     kmapList.appendChild(card);
@@ -2473,87 +2582,109 @@ function attachEvents() {
     }
   });
 
+  kmapList.addEventListener('dragstart', (e) => {
+    const tokenEl = e.target.closest('.kmap-token, .kmap-expr-token');
+    if (!tokenEl) return;
+    const type = tokenEl.dataset.tokenType;
+    const value = tokenEl.dataset.tokenValue;
+    const fromIndex = tokenEl.classList.contains('kmap-expr-token')
+      ? parseInt(tokenEl.dataset.index, 10)
+      : null;
+    const cardKmapId =
+      tokenEl.closest('.kmap-card')?.querySelector('.kmap-expression-tray')?.dataset.kmapId;
+    const kmapId = tokenEl.dataset.kmapId || cardKmapId;
+    kmapExpressionDragState = {
+      source: tokenEl.classList.contains('kmap-expr-token') ? 'expression' : 'tray',
+      type,
+      value,
+      fromIndex,
+      kmapId,
+    };
+    e.dataTransfer.setData('text/plain', `${type}:${value}`);
+  });
+
+  kmapList.addEventListener('dragover', (e) => {
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (!tray) return;
+    e.preventDefault();
+    const tokens = [...(getKmapById(tray.dataset.kmapId)?.expressionTokens || [])];
+    const targetToken = e.target.closest('.kmap-expr-token');
+    const marker = ensureDropMarker(tray);
+    let index = tokens.length;
+    if (targetToken && targetToken.parentNode === tray) {
+      const rect = targetToken.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      index = parseInt(targetToken.dataset.index, 10);
+      if (!Number.isNaN(index) && !before) index += 1;
+      tray.insertBefore(marker, before ? targetToken : targetToken.nextSibling);
+    } else if (!marker.parentNode) {
+      tray.appendChild(marker);
+    }
+    marker.dataset.index = index;
+  });
+
+  kmapList.addEventListener('dragleave', (e) => {
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (tray && !tray.contains(e.relatedTarget)) {
+      clearDropMarker(tray);
+    }
+  });
+
+  kmapList.addEventListener('drop', (e) => {
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (!tray) return;
+    e.preventDefault();
+    const marker = tray.querySelector('.kmap-drop-marker');
+    let index = marker ? parseInt(marker.dataset.index || '0', 10) : 0;
+    clearDropMarker(tray);
+    const kmap = getKmapById(tray.dataset.kmapId);
+    if (!kmap) return;
+    const tokens = [...(kmap.expressionTokens || [])];
+    const payload = kmapExpressionDragState;
+    kmapExpressionDragState = null;
+    if (!payload || !payload.type) return;
+
+    if (payload.source === 'expression' && payload.kmapId === kmap.id.toString()) {
+      if (!Number.isNaN(payload.fromIndex)) {
+        tokens.splice(payload.fromIndex, 1);
+        if (index > payload.fromIndex) index -= 1;
+      }
+    }
+
+    const token = { type: payload.type, value: payload.value };
+    if (token.type === 'var') token.negated = false;
+    tokens.splice(Math.max(0, Math.min(tokens.length, index)), 0, token);
+    updateKmapExpressionTokens(kmap, tokens, tray);
+    markDirty();
+  });
+
+  kmapList.addEventListener('dragend', () => {
+    document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
+    kmapExpressionDragState = null;
+  });
+
   kmapList.addEventListener('focusin', (e) => {
     if (e.target.classList.contains('kmap-cell-input')) {
       e.target.select();
-    }
-    if (e.target.classList.contains('kmap-expression-input')) {
-      const kmap = state.kmaps.find((m) => m.id.toString() === e.target.dataset.kmapId);
-      const editorState = getExpressionState(e.target, kmap);
-      editorState.caret = editorState.raw.length;
-      syncExpressionInput(e.target, kmap, editorState);
     }
   });
 
   kmapList.addEventListener('keydown', (e) => {
     const target = e.target;
-    if (target.classList.contains('kmap-expression-input')) {
-      const key = e.key;
-      const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
+    const exprTray = target.closest && target.closest('.kmap-expression-tray');
+    if (exprTray) {
+      const kmap = getKmapById(exprTray.dataset.kmapId);
       if (!kmap) return;
-      const editorState = getExpressionState(target, kmap);
-      if (key === 'Tab') {
-        const applied = applyAutocomplete(editorState);
-        if (applied) {
-          e.preventDefault();
-          syncExpressionInput(target, kmap, editorState);
+      const tokens = [...(kmap.expressionTokens || [])];
+      const selected = exprTray.querySelector('.kmap-expr-token.selected');
+      if ((e.key === 'Backspace' || e.key === 'Delete') && selected) {
+        const idx = parseInt(selected.dataset.index, 10);
+        if (!Number.isNaN(idx)) {
+          tokens.splice(idx, 1);
+          updateKmapExpressionTokens(kmap, tokens, exprTray);
           markDirty();
         }
-        return;
-      }
-      if (key === 'ArrowDown' || key === 'ArrowUp') {
-        const cycled = cycleAutocompleteState(editorState, key === 'ArrowDown' ? 1 : -1);
-        if (cycled) {
-          e.preventDefault();
-          syncExpressionInput(target, kmap, editorState);
-        }
-        return;
-      }
-      if (key === 'ArrowLeft' || key === 'ArrowRight') {
         e.preventDefault();
-        if (key === 'ArrowRight') editorState.scriptMode = null;
-        updateTermSelection(editorState, key === 'ArrowLeft' ? -1 : 1);
-        syncExpressionInput(target, kmap, editorState);
-        return;
-      }
-      if (key === 'Backspace') {
-        e.preventDefault();
-        removeFromExpression(editorState, 1);
-        editorState.selectionMode = null;
-        editorState.selectedTerm = null;
-        syncExpressionInput(target, kmap, editorState);
-        markDirty();
-        return;
-      }
-      if (key === 'Delete') {
-        e.preventDefault();
-        const right = editorState.raw.slice(editorState.caret + 1);
-        editorState.raw = editorState.raw.slice(0, editorState.caret) + right;
-        syncExpressionInput(target, kmap, editorState);
-        markDirty();
-        return;
-      }
-      if (key === '_' || key === '^') {
-        e.preventDefault();
-        editorState.scriptMode = key === '_' ? 'sub' : 'sup';
-        insertIntoExpression(editorState, key);
-        syncExpressionInput(target, kmap, editorState);
-        handleAutocomplete(editorState, kmap.variables);
-        markDirty();
-        return;
-      }
-      if (key.length === 1) {
-        e.preventDefault();
-        const insertChar = key === '*' ? ' ' : key;
-        insertIntoExpression(editorState, insertChar);
-        if (key === ' ') {
-          editorState.selectionMode = null;
-          editorState.selectedTerm = null;
-        }
-        syncExpressionInput(target, kmap, editorState);
-        handleAutocomplete(editorState, kmap.variables);
-        markDirty();
-        return;
       }
       return;
     }
@@ -2603,6 +2734,37 @@ function attachEvents() {
       verifyBtn.title = result.passed
         ? 'Expression matches K-map'
         : result.reason || 'Expression verification failed';
+      return;
+    }
+
+    const exprToken = e.target.closest('.kmap-expr-token');
+    if (exprToken) {
+      const tray = exprToken.closest('.kmap-expression-tray');
+      const kmap = tray ? getKmapById(tray.dataset.kmapId) : null;
+      if (!kmap) return;
+      tray.focus();
+      const idx = parseInt(exprToken.dataset.index, 10);
+      if (Number.isNaN(idx)) return;
+      const tokens = [...(kmap.expressionTokens || [])];
+      const token = tokens[idx];
+      if (!token) return;
+      tray.querySelectorAll('.kmap-expr-token.selected').forEach((el) =>
+        el.classList.remove('selected'),
+      );
+      if (token.type === 'var') {
+        token.negated = !token.negated;
+      }
+      updateKmapExpressionTokens(kmap, tokens, tray);
+      const newToken = tray.querySelector(`.kmap-expr-token[data-index="${idx}"]`);
+      if (newToken) newToken.classList.add('selected');
+      markDirty();
+      return;
+    }
+
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (tray) {
+      tray.focus();
+      tray.querySelectorAll('.kmap-expr-token.selected').forEach((el) => el.classList.remove('selected'));
     }
   });
 
