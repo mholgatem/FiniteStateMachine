@@ -8,6 +8,8 @@ const state = {
   transitions: [],
   showBinary: true,
   transitionTable: { cells: {} },
+  transitionTableVerified: false,
+  kmaps: [],
 };
 
 let currentArrow = null;
@@ -47,6 +49,18 @@ const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
 const toolbarNewMachine = document.getElementById('toolbarNewMachine');
+const kmapWindow = document.getElementById('kmapWindow');
+const kmapWindowHeader = document.getElementById('kmapWindowHeader');
+const kmapList = document.getElementById('kmapList');
+const kmapEmptyState = document.getElementById('kmapEmptyState');
+const confirmKmapCreate = document.getElementById('confirmKmapCreate');
+const kmapLabelInput = document.getElementById('kmapLabel');
+const kmapVariablesInput = document.getElementById('kmapVariables');
+const kmapTypeInput = document.getElementById('kmapType');
+const kmapDirectionInput = document.getElementById('kmapDirection');
+const kmapResizeHandle = document.getElementById('kmapResizeHandle');
+
+let kmapWindowState = { width: 840, height: 540, left: null, top: null };
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 
 function coerceAllowedStateCount(value) {
@@ -80,7 +94,29 @@ function openDialog(id) {
 
 function clearVerificationStatus() {
   const verifyBtn = document.getElementById('verifyTransitionTable');
-  if (verifyBtn) verifyBtn.classList.remove('verified');
+  if (verifyBtn) {
+    verifyBtn.classList.remove('verified', 'failed');
+    verifyBtn.removeAttribute('title');
+  }
+}
+
+function setVerificationStatus(passed) {
+  const verifyBtn = document.getElementById('verifyTransitionTable');
+  if (!verifyBtn) return;
+  verifyBtn.classList.remove('verified', 'failed');
+  if (passed === true) {
+    verifyBtn.classList.add('verified');
+    verifyBtn.title = 'Your transition table matches your transition diagram';
+    state.transitionTableVerified = true;
+    return;
+  }
+  if (passed === false) {
+    verifyBtn.classList.add('failed');
+    verifyBtn.title = 'Your transition table DOES NOT match your transition diagram';
+    state.transitionTableVerified = false;
+    return;
+  }
+  state.transitionTableVerified = false;
 }
 
 function diagramHasHighlightedStates() {
@@ -96,12 +132,12 @@ function updateVerifyButtonState() {
   if (!verifyBtn) return;
   const hasErrors = diagramHasHighlightedStates();
   verifyBtn.disabled = hasErrors;
-  if (hasErrors) verifyBtn.classList.remove('verified');
+  if (hasErrors) setVerificationStatus(null);
 }
 
 function markDirty() {
   unsavedChanges = true;
-  clearVerificationStatus();
+  setVerificationStatus(null);
   updateVerifyButtonState();
 }
 
@@ -133,6 +169,11 @@ function normalizeNames(list) {
 
 function parseList(value) {
   return normalizeNames(value.split(','));
+}
+
+function parseKmapVariables(value) {
+  const vars = parseList(value || '');
+  return vars.slice(0, 6);
 }
 
 function defaultSelections(count, fallbackText = '') {
@@ -290,6 +331,7 @@ function initStates() {
   }));
   state.transitions = [];
   state.transitionTable = { cells: {} };
+  state.transitionTableVerified = false;
   undoStack = [];
   selectedArrowId = null;
   selectedStateId = null;
@@ -726,7 +768,8 @@ function transitionTableRowIsBlank(row) {
   });
 }
 
-function verifyTransitionTableAgainstDiagram() {
+function verifyTransitionTableAgainstDiagram(options = {}) {
+  const { silent = false, recordStatus = true } = options;
   ensureTransitionTableStructure();
   const { expectations, conflict } = buildDiagramExpectations();
 
@@ -769,11 +812,14 @@ function verifyTransitionTableAgainstDiagram() {
   });
 
   if (matches) {
-    const verifyBtn = document.getElementById('verifyTransitionTable');
-    if (verifyBtn) verifyBtn.classList.add('verified');
+    setVerificationStatus(true);
+    if (recordStatus) unsavedChanges = true;
   } else {
-    window.alert('Your state transition table does not match your state transition diagram');
-    clearVerificationStatus();
+    if (!silent) {
+      window.alert('Your state transition table does not match your state transition diagram');
+    }
+    setVerificationStatus(false);
+    if (recordStatus) unsavedChanges = true;
   }
 }
 
@@ -982,6 +1028,16 @@ function loadState(data) {
   state.outputs = normalizeNames(state.outputs || []);
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
+  state.transitionTableVerified = !!data.transitionTableVerified;
+  state.kmaps = Array.isArray(data.kmaps)
+    ? data.kmaps.map((k) => ({
+        ...k,
+        id: k.id || Date.now() + Math.random(),
+        variables: normalizeNames(k.variables || []),
+        cells: k.cells || {},
+        expression: k.expression || '',
+      }))
+    : [];
   undoStack = [];
   selectedArrowId = null;
   selectedStateId = null;
@@ -994,8 +1050,294 @@ function loadState(data) {
   renderPalette();
   renderTransitionTable();
   renderDiagram();
-  clearVerificationStatus();
+  renderKmaps();
+  verifyTransitionTableAgainstDiagram({ silent: true, recordStatus: false });
   clearDirty();
+}
+
+function grayCode(bits) {
+  if (bits <= 0) return [''];
+  let codes = ['0', '1'];
+  for (let i = 1; i < bits; i += 1) {
+    const reflected = [...codes].reverse();
+    codes = codes.map((c) => `0${c}`).concat(reflected.map((c) => `1${c}`));
+  }
+  return codes;
+}
+
+function formatVariableList(vars) {
+  return vars.join(', ') || '—';
+}
+
+function buildKmapLayout(kmap) {
+  const variables = kmap.variables || [];
+  const mapVarCount = Math.max(0, variables.length - 4);
+  const mapVars = variables.slice(0, mapVarCount);
+  const coreVars = variables.slice(mapVarCount);
+  const moreSigCount = Math.ceil(coreVars.length / 2);
+  let moreSig = coreVars.slice(0, moreSigCount);
+  let lessSig = coreVars.slice(moreSigCount);
+  if (lessSig.length === 0 && moreSig.length > 1) {
+    lessSig = [moreSig.pop()];
+  }
+  let rowVars = kmap.direction === 'vertical' ? moreSig : lessSig;
+  let colVars = kmap.direction === 'vertical' ? lessSig : moreSig;
+  if (rowVars.length === 0 && colVars.length) {
+    rowVars = [colVars.shift()];
+  }
+  const rowCodes = grayCode(rowVars.length);
+  const colCodes = grayCode(colVars.length);
+  const baseRows = rowCodes.length || 1;
+  const baseCols = colCodes.length || 1;
+
+  let mapRows = 1;
+  let mapCols = 1;
+  let mapRowCodes = [''];
+  let mapColCodes = [''];
+
+  if (mapVarCount === 1) {
+    mapCols = 2;
+    mapColCodes = grayCode(1);
+  } else if (mapVarCount >= 2) {
+    mapRows = 2;
+    mapCols = 2;
+    mapRowCodes = grayCode(1);
+    mapColCodes = grayCode(1);
+  }
+
+  const submaps = [];
+  for (let mr = 0; mr < mapRows; mr += 1) {
+    for (let mc = 0; mc < mapCols; mc += 1) {
+      const mapCode = `${mapRowCodes[mr] || ''}${mapColCodes[mc] || ''}`;
+      const assignments = mapVars.map((name, idx) => `${name}=${mapCode[idx] || '0'}`);
+      submaps.push({
+        mapRow: mr,
+        mapCol: mc,
+        mapCode,
+        label: assignments.join(', '),
+        rowOffset: mr * baseRows,
+        colOffset: mc * baseCols,
+      });
+    }
+  }
+
+  return {
+    mapVarCount,
+    mapVars,
+    rowVars,
+    colVars,
+    rowCodes,
+    colCodes,
+    baseRows,
+    baseCols,
+    mapRows,
+    mapCols,
+    totalRows: baseRows * mapRows,
+    totalCols: baseCols * mapCols,
+    submaps,
+  };
+}
+
+function kmapCellKey(row, col) {
+  return `${row}-${col}`;
+}
+
+function buildKmapCornerLabel(layout) {
+  const corner = document.createElement('div');
+  corner.className = 'kmap-corner-label';
+  const diagonal = document.createElement('div');
+  diagonal.className = 'kmap-diagonal';
+  corner.appendChild(diagonal);
+
+  const rowVars = document.createElement('div');
+  rowVars.className = 'kmap-variable-block kmap-vars-row';
+  rowVars.textContent = formatVariableList(layout.rowVars);
+  corner.appendChild(rowVars);
+
+  const colVars = document.createElement('div');
+  colVars.className = 'kmap-variable-block kmap-vars-col';
+  colVars.textContent = formatVariableList(layout.colVars);
+  corner.appendChild(colVars);
+  return corner;
+}
+
+function buildKmapTable(kmap, layout, submap) {
+  const table = document.createElement('table');
+  table.className = 'kmap-table';
+
+  const headerRow = document.createElement('tr');
+  const cornerCell = document.createElement('th');
+  cornerCell.rowSpan = 1;
+  cornerCell.appendChild(buildKmapCornerLabel(layout));
+  headerRow.appendChild(cornerCell);
+
+  layout.colCodes.forEach((code) => {
+    const th = document.createElement('th');
+    th.textContent = code || '0';
+    headerRow.appendChild(th);
+  });
+  table.appendChild(headerRow);
+
+  layout.rowCodes.forEach((rowCode, rIdx) => {
+    const tr = document.createElement('tr');
+    const rowHeader = document.createElement('th');
+    rowHeader.textContent = rowCode || '0';
+    tr.appendChild(rowHeader);
+
+    layout.colCodes.forEach((colCode, cIdx) => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      const rowIndex = submap.rowOffset + rIdx;
+      const colIndex = submap.colOffset + cIdx;
+      input.dataset.kmapId = kmap.id;
+      input.dataset.rowIndex = rowIndex;
+      input.dataset.colIndex = colIndex;
+      input.dataset.totalRows = layout.totalRows;
+      input.dataset.totalCols = layout.totalCols;
+      input.classList.add('kmap-cell-input');
+      input.value = (kmap.cells && kmap.cells[kmapCellKey(rowIndex, colIndex)]) || '';
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+
+  return table;
+}
+
+function renderKmaps() {
+  if (!kmapList) return;
+  kmapList.innerHTML = '';
+  const hasKmaps = (state.kmaps || []).length > 0;
+  kmapEmptyState.classList.toggle('hidden', hasKmaps);
+
+  state.kmaps.forEach((kmap) => {
+    const card = document.createElement('div');
+    card.className = 'kmap-card';
+    const layout = buildKmapLayout(kmap);
+    card.dataset.totalRows = layout.totalRows;
+    card.dataset.totalCols = layout.totalCols;
+
+    const heading = document.createElement('h4');
+    heading.textContent = kmap.label || 'K-map';
+    card.appendChild(heading);
+
+    const meta = document.createElement('div');
+    meta.className = 'kmap-meta';
+    meta.innerHTML = `
+      <span><strong>Type:</strong> ${kmap.type?.toUpperCase() || 'SOP'}</span>
+      <span><strong>Direction:</strong> ${kmap.direction === 'vertical' ? 'Vertical' : 'Horizontal'}</span>
+      <span><strong>Variables:</strong> ${formatVariableList(kmap.variables || [])}</span>
+    `;
+    card.appendChild(meta);
+
+    const gridCollection = document.createElement('div');
+    gridCollection.className = 'kmap-grid-collection';
+    gridCollection.style.gridTemplateColumns = `repeat(${layout.mapCols}, minmax(${layout.baseCols * 60 + 90}px, 1fr))`;
+
+    layout.submaps.forEach((sub) => {
+      const submap = document.createElement('div');
+      submap.className = 'kmap-submap';
+      submap.style.gridColumn = sub.mapCol + 1;
+      submap.style.gridRow = sub.mapRow + 1;
+      const label = document.createElement('div');
+      label.className = 'kmap-submap-label';
+      label.textContent = sub.label || ' ';
+      submap.appendChild(label);
+      submap.appendChild(buildKmapTable(kmap, layout, sub));
+      gridCollection.appendChild(submap);
+    });
+
+    card.appendChild(gridCollection);
+
+    const expressionRow = document.createElement('div');
+    expressionRow.className = 'kmap-expression';
+    const symbol = kmap.type === 'pos' ? 'Π' : 'Σ';
+    const label = document.createElement('span');
+    label.textContent = `${kmap.label || 'K-map'} ${symbol} =`;
+    expressionRow.appendChild(label);
+
+    const exprInput = document.createElement('input');
+    exprInput.type = 'text';
+    exprInput.value = kmap.expression || '';
+    exprInput.dataset.kmapId = kmap.id;
+    exprInput.classList.add('kmap-expression-input');
+    expressionRow.appendChild(exprInput);
+
+    const verifyBtn = document.createElement('button');
+    verifyBtn.textContent = 'Verify';
+    verifyBtn.type = 'button';
+    verifyBtn.disabled = true;
+    expressionRow.appendChild(verifyBtn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove K-map';
+    removeBtn.dataset.removeKmap = kmap.id;
+    expressionRow.appendChild(removeBtn);
+
+    card.appendChild(expressionRow);
+    kmapList.appendChild(card);
+  });
+}
+
+function openKmapWindow() {
+  if (!kmapWindow) return;
+  if (kmapWindowState.left === null || kmapWindowState.top === null) {
+    const centeredLeft = Math.max(12, (window.innerWidth - kmapWindowState.width) / 2);
+    const centeredTop = Math.max(12, (window.innerHeight - kmapWindowState.height) / 2);
+    kmapWindowState.left = centeredLeft;
+    kmapWindowState.top = centeredTop;
+  }
+  kmapWindow.style.width = `${kmapWindowState.width}px`;
+  kmapWindow.style.height = `${kmapWindowState.height}px`;
+  kmapWindow.style.left = `${kmapWindowState.left}px`;
+  kmapWindow.style.top = `${kmapWindowState.top}px`;
+  kmapWindow.style.transform = 'none';
+  kmapWindow.classList.remove('hidden');
+}
+
+function closeKmapWindow() {
+  if (kmapWindow) kmapWindow.classList.add('hidden');
+}
+
+function resetKmapDialog() {
+  kmapLabelInput.value = '';
+  kmapVariablesInput.value = '';
+  kmapTypeInput.value = 'sop';
+  kmapDirectionInput.value = 'horizontal';
+  confirmKmapCreate.disabled = true;
+}
+
+function validateKmapDialog() {
+  const vars = parseKmapVariables(kmapVariablesInput.value);
+  const label = kmapLabelInput.value.trim();
+  const isValid = vars.length >= 2 && vars.length <= 6 && label.length > 0;
+  confirmKmapCreate.disabled = !isValid;
+}
+
+function openKmapDialog() {
+  resetKmapDialog();
+  openDialog('kmapCreateDialog');
+}
+
+function createKmapFromDialog() {
+  const variables = parseKmapVariables(kmapVariablesInput.value);
+  const label = kmapLabelInput.value.trim() || 'K-map';
+  const newMap = {
+    id: Date.now(),
+    label,
+    variables,
+    type: kmapTypeInput.value,
+    direction: kmapDirectionInput.value,
+    cells: {},
+    expression: '',
+  };
+  state.kmaps.push(newMap);
+  renderKmaps();
+  closeDialog('kmapCreateDialog');
+  openKmapWindow();
+  markDirty();
 }
 
 function captureImage(element, filename) {
@@ -1266,6 +1608,59 @@ function attachEvents() {
   );
   toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
+  document.getElementById('kmapToggle').addEventListener('click', () => {
+    if (kmapWindow.classList.contains('hidden')) openKmapWindow();
+    else closeKmapWindow();
+  });
+  document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
+  document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
+  confirmKmapCreate.addEventListener('click', createKmapFromDialog);
+  kmapLabelInput.addEventListener('input', validateKmapDialog);
+  kmapVariablesInput.addEventListener('input', validateKmapDialog);
+  kmapWindowHeader.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return;
+    const rect = kmapWindow.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    const moveHandler = (ev) => {
+      const newLeft = Math.min(Math.max(0, ev.clientX - offsetX), window.innerWidth - rect.width + 12);
+      const newTop = Math.min(Math.max(0, ev.clientY - offsetY), window.innerHeight - rect.height + 12);
+      kmapWindowState.left = newLeft;
+      kmapWindowState.top = newTop;
+      kmapWindow.style.left = `${newLeft}px`;
+      kmapWindow.style.top = `${newTop}px`;
+      kmapWindow.style.transform = 'none';
+    };
+    const upHandler = () => {
+      document.removeEventListener('mousemove', moveHandler);
+      document.removeEventListener('mouseup', upHandler);
+    };
+    document.addEventListener('mousemove', moveHandler);
+    document.addEventListener('mouseup', upHandler);
+  });
+
+  kmapResizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const rect = kmapWindow.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+    const resizeHandler = (ev) => {
+      const newWidth = Math.max(520, Math.min(window.innerWidth - rect.left - 12, startWidth + (ev.clientX - startX)));
+      const newHeight = Math.max(320, Math.min(window.innerHeight - rect.top - 12, startHeight + (ev.clientY - startY)));
+      kmapWindowState.width = newWidth;
+      kmapWindowState.height = newHeight;
+      kmapWindow.style.width = `${newWidth}px`;
+      kmapWindow.style.height = `${newHeight}px`;
+    };
+    const stopResize = () => {
+      document.removeEventListener('mousemove', resizeHandler);
+      document.removeEventListener('mouseup', stopResize);
+    };
+    document.addEventListener('mousemove', resizeHandler);
+    document.addEventListener('mouseup', stopResize);
+  });
 
   document.getElementById('createMachine').addEventListener('click', () => {
     state.name = document.getElementById('machineName').value || 'Untitled Machine';
@@ -1281,9 +1676,11 @@ function attachEvents() {
     renderPalette();
     renderTransitionTable();
     renderDiagram();
+    state.kmaps = [];
+    renderKmaps();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
-    clearVerificationStatus();
+    setVerificationStatus(null);
     clearDirty();
   });
 
@@ -1524,6 +1921,71 @@ function attachEvents() {
       nextInput.focus();
       nextInput.select();
       e.preventDefault();
+    }
+  });
+
+  kmapList.addEventListener('input', (e) => {
+    const target = e.target;
+    if (target.classList.contains('kmap-cell-input')) {
+      let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+      if (val.length > 1) val = val[0];
+      target.value = val;
+      const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
+      if (!kmap) return;
+      if (!kmap.cells) kmap.cells = {};
+      kmap.cells[kmapCellKey(target.dataset.rowIndex, target.dataset.colIndex)] = val;
+      markDirty();
+    }
+    if (target.classList.contains('kmap-expression-input')) {
+      const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
+      if (!kmap) return;
+      kmap.expression = target.value;
+      markDirty();
+    }
+  });
+
+  kmapList.addEventListener('focusin', (e) => {
+    if (e.target.classList.contains('kmap-cell-input')) {
+      e.target.select();
+    }
+  });
+
+  kmapList.addEventListener('keydown', (e) => {
+    const target = e.target;
+    if (!target.classList.contains('kmap-cell-input')) return;
+    const { key } = e;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+    const card = target.closest('.kmap-card');
+    if (!card) return;
+    const totalRows = parseInt(card.dataset.totalRows || '0', 10);
+    const totalCols = parseInt(card.dataset.totalCols || '0', 10);
+    if (!totalRows || !totalCols) return;
+    const rowIdx = parseInt(target.dataset.rowIndex, 10);
+    const colIdx = parseInt(target.dataset.colIndex, 10);
+    if (Number.isNaN(rowIdx) || Number.isNaN(colIdx)) return;
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+    if (key === 'ArrowLeft') nextCol = Math.max(0, colIdx - 1);
+    if (key === 'ArrowRight') nextCol = Math.min(totalCols - 1, colIdx + 1);
+    if (key === 'ArrowUp') nextRow = Math.max(0, rowIdx - 1);
+    if (key === 'ArrowDown') nextRow = Math.min(totalRows - 1, rowIdx + 1);
+
+    const selector = `.kmap-cell-input[data-row-index="${nextRow}"][data-col-index="${nextCol}"]`;
+    const nextInput = card.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+      e.preventDefault();
+    }
+  });
+
+  kmapList.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('[data-remove-kmap]');
+    if (removeBtn) {
+      const id = removeBtn.dataset.removeKmap;
+      state.kmaps = state.kmaps.filter((k) => k.id.toString() !== id);
+      renderKmaps();
+      markDirty();
     }
   });
 
@@ -1815,6 +2277,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTable();
   renderTransitionTable();
   renderPalette();
+  renderKmaps();
   applyViewTransform();
   renderDiagram();
 });
