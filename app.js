@@ -2642,8 +2642,6 @@ function attachEvents() {
     if (!tray) return;
     e.preventDefault();
     const marker = tray.querySelector('.kmap-drop-marker');
-    let index = 0;
-    clearDropMarker(tray);
     const kmap = getKmapById(tray.dataset.kmapId);
     if (!kmap) return;
     const tokens = [...(kmap.expressionTokens || [])];
@@ -2651,12 +2649,14 @@ function attachEvents() {
     kmapExpressionDragState = null;
     if (!payload || !payload.type) return;
 
+    let index = tokens.length;
     if (marker && marker.parentNode === tray) {
       const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
       const markerIndex = sequence.indexOf(marker);
       index = markerIndex === -1 ? tokens.length : markerIndex;
     }
-    
+    clearDropMarker(tray);
+
     if (payload.source === 'expression' && payload.kmapId === kmap.id.toString()) {
       if (!Number.isNaN(payload.fromIndex)) {
         tokens.splice(payload.fromIndex, 1);

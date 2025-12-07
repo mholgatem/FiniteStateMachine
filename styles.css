@@ -815,7 +815,9 @@ svg text {
 .kmap-drop-marker {
   width: 2px;
   height: 24px;
-  background: var(--accent);
+  background: var(--text);
+  opacity: 0.75;
+  box-shadow: 0 0 0 1px var(--border);
   align-self: stretch;
 }
 
