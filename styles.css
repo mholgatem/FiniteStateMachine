@@ -473,6 +473,10 @@ button:active {
   flex-wrap: wrap;
 }
 
+#landing .dialog-actions {
+  justify-content: center;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;
@@ -806,6 +810,11 @@ svg text {
 
 .kmap-expr-token.selected {
   border: 1px solid #0f9d9f;
+}
+
+.kmap-expr-token.operator {
+  background: cornflowerblue;
+  color: #fff;
 }
 .kmap-expr-token-inner {
   position: relative;

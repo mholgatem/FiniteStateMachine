@@ -1237,6 +1237,9 @@ function renderExpressionToken(token, index, kmapId) {
   el.dataset.kmapId = kmapId;
   const inner = document.createElement('span');
   inner.className = 'kmap-expr-token-inner';
+  if (token.type === 'op' || token.type === 'paren') {
+    el.classList.add('operator');
+  }
   if (token.type === 'var') {
     inner.classList.toggle('negated', !!token.negated);
   }
