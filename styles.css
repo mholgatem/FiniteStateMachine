@@ -798,7 +798,8 @@ svg text {
 }
 
 .kmap-expr-token.selected {
-  outline: 2px solid var(--accent);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
 .kmap-expr-token-inner.negated {
