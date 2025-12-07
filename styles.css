@@ -814,12 +814,12 @@ svg text {
 /* keep same general placement as before */
 .kmap-corner-label .kmap-vars-row {
   align-self: flex-start;
-  transform: translateY(-2px);   /* move the row vars up a bit */
+  transform: translateY(3px) translateX(15px);
 }
 
 .kmap-corner-label .kmap-vars-col {
   align-self: flex-end;
-  transform: translateY(2px);    /* move the column vars down a bit */
+  transform: translateY(2px) translateX(-10px);
 }
 
 /* per-letter offsets */
@@ -829,6 +829,19 @@ svg text {
 
 .kmap-var-bottom {
   transform: translateY(1px);    /* slightly lower */
+}
+
+.kmap-gray-code {
+  display: inline-block;
+  font-weight: 700;
+}
+
+.kmap-gray-row {
+  transform: translateX(-10px);
+}
+
+.kmap-gray-col {
+  transform: translateY(-5px);
 }
 
 .kmap-expression {

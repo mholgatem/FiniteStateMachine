@@ -1081,8 +1081,8 @@ function buildKmapLayout(kmap) {
   if (lessSig.length === 0 && moreSig.length > 1) {
     lessSig = [moreSig.pop()];
   }
-  let rowVars = kmap.direction === 'vertical' ? moreSig : lessSig;
-  let colVars = kmap.direction === 'vertical' ? lessSig : moreSig;
+  let rowVars = kmap.direction === 'vertical' ? lessSig : moreSig;
+  let colVars = kmap.direction === 'vertical' ? moreSig : lessSig;
   if (rowVars.length === 0 && colVars.length) {
     rowVars = [colVars.shift()];
   }
@@ -1181,7 +1181,10 @@ function buildKmapTable(kmap, layout, submap) {
 
   layout.colCodes.forEach((code) => {
     const th = document.createElement('th');
-    th.textContent = code || '0';
+    const span = document.createElement('span');
+    span.className = 'kmap-gray-code kmap-gray-col';
+    span.textContent = code || '0';
+    th.appendChild(span);
     headerRow.appendChild(th);
   });
   table.appendChild(headerRow);
@@ -1189,7 +1192,10 @@ function buildKmapTable(kmap, layout, submap) {
   layout.rowCodes.forEach((rowCode, rIdx) => {
     const tr = document.createElement('tr');
     const rowHeader = document.createElement('th');
-    rowHeader.textContent = rowCode || '0';
+    const span = document.createElement('span');
+    span.className = 'kmap-gray-code kmap-gray-row';
+    span.textContent = rowCode || '0';
+    rowHeader.appendChild(span);
     tr.appendChild(rowHeader);
 
     layout.colCodes.forEach((colCode, cIdx) => {
