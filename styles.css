@@ -851,8 +851,52 @@ svg text {
   flex-wrap: wrap;
 }
 
-.kmap-expression input {
-  min-width: 200px;
+.kmap-expression .kmap-expression-input {
+  min-width: 260px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  min-height: 34px;
+  outline: none;
+  background: var(--surface);
+  font-family: var(--font-mono, 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono',
+      'Courier New', monospace);
+  cursor: text;
+}
+
+.kmap-expression-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(21, 119, 238, 0.15);
+}
+
+.expr-term {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.1rem;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+
+.expr-term.selected {
+  background: rgba(21, 119, 238, 0.12);
+}
+
+.expr-term-base {
+  text-decoration-thickness: 2px;
+}
+
+.expr-gap.and-gap {
+  display: inline-block;
+  width: 0.35rem;
+}
+
+.expr-gap.or-gap {
+  display: inline-block;
+  width: 0.75rem;
+}
+
+.expr-paren {
+  padding: 0 2px;
 }
 
 .kmap-expression button.verified {

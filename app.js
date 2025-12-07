@@ -1071,6 +1071,7 @@ function formatVariableList(vars) {
 }
 
 const expressionAutocompleteState = new WeakMap();
+const expressionEditorState = new WeakMap();
 
 function stripOverlines(text) {
   return (text || '').replace(/\u0305/g, '');
@@ -1254,14 +1255,18 @@ function normalizeVarName(name) {
   return stripOverlines(name || '').replace(/\s+/g, '').toLowerCase();
 }
 
-function syncExpressionInput(target, kmap) {
-  const caret = target.selectionStart ?? target.value.length;
-  const rendered = formatExpressionDisplay(target.value, kmap?.variables || []);
-  target.value = rendered;
-  applyAutocompletePreview(target, kmap?.variables || [], caret);
-  const finalTokens = normalizeExpressionTokens(target.value);
-  const canonical = tokensToCanonical(finalTokens);
-  if (kmap) kmap.expression = canonical || target.value.trim();
+function getExpressionState(editor, kmap) {
+  let state = expressionEditorState.get(editor);
+  if (!state) {
+    state = {
+      raw: kmap?.expression || '',
+      caret: (kmap?.expression || '').length,
+      scriptMode: null,
+      selectedTerm: null,
+    };
+    expressionEditorState.set(editor, state);
+  }
+  return state;
 }
 
 function buildAutocompleteMatches(prefix, variables) {
@@ -1270,58 +1275,138 @@ function buildAutocompleteMatches(prefix, variables) {
   return (variables || []).filter((v) => normalizeVarName(v).startsWith(clean));
 }
 
-function applyAutocompletePreview(input, variables, caretPosition) {
-  const state = expressionAutocompleteState.get(input) || {};
-  if (state.scriptMode) {
-    input.setSelectionRange(caretPosition, caretPosition);
-    expressionAutocompleteState.set(input, state);
-    return;
-  }
-  const value = input.value;
-  const start = Math.max(
-    0,
-    (() => {
-      for (let idx = caretPosition - 1; idx >= 0; idx -= 1) {
-        if (!/[A-Za-z0-9_^]/.test(value[idx])) return idx + 1;
-      }
-      return 0;
-    })(),
-  );
-  const prefix = value.slice(start, caretPosition);
-  const beforePrefix = value[start - 1] || '';
-  if (beforePrefix === '(') {
-    input.setSelectionRange(caretPosition, caretPosition);
-    expressionAutocompleteState.set(input, { matches: [], index: 0, start, prefix });
-    return;
-  }
-  const matches = buildAutocompleteMatches(prefix, variables);
-  if (!matches.length || !prefix) {
-    input.setSelectionRange(caretPosition, caretPosition);
-    expressionAutocompleteState.set(input, { matches: [], index: 0, start, prefix });
-    return;
-  }
-  const index = Math.min(state.index || 0, matches.length - 1);
-  const suggestion = matches[index];
-  const preview = value.slice(0, start) + suggestion + value.slice(caretPosition);
-  input.value = preview;
-  const selStart = start + prefix.length;
-  const selEnd = start + suggestion.length;
-  input.setSelectionRange(selStart, selEnd);
-  expressionAutocompleteState.set(input, { matches, index, start, prefix });
+function renderExpressionTerm(name, negated, termIndex) {
+  const scripted = formatScriptedText(name || '');
+  const base = escapeHtml((name || '').split(/[_^]/)[0] || '');
+  const decoration = negated ? 'text-decoration: overline;' : '';
+  const baseSpan = `<span class="expr-term-base" style="${decoration}">${base || '&nbsp;'}</span>`;
+  return `<span class="expr-term" data-term-index="${termIndex}">${baseSpan}${scripted.replace(
+    base,
+    '',
+  )}</span>`;
 }
 
-function cycleAutocomplete(input, direction) {
-  const state = expressionAutocompleteState.get(input);
-  if (!state || !(state.matches || []).length) return;
-  const len = state.matches.length;
-  state.index = (len + state.index + direction) % len;
-  const caret = state.start + (state.prefix || '').length;
-  input.value =
-    input.value.slice(0, state.start) + state.matches[state.index] + input.value.slice(caret);
-  const selStart = state.start + (state.prefix || '').length;
-  const selEnd = state.start + state.matches[state.index].length;
-  input.setSelectionRange(selStart, selEnd);
-  expressionAutocompleteState.set(input, state);
+function renderExpressionHtml(raw) {
+  const tokens = normalizeExpressionTokens(raw || '');
+  const parts = [];
+  let termIndex = 0;
+  let prevType = null;
+  tokens.forEach((tk) => {
+    if (tk.type === 'var') {
+      if (prevType === 'var' || prevType === 'close') {
+        parts.push('<span class="expr-gap and-gap"></span>');
+      }
+      parts.push(renderExpressionTerm(tk.value, tk.negated, termIndex));
+      termIndex += 1;
+      prevType = 'var';
+      return;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '+') {
+        parts.push('<span class="expr-gap or-gap"></span>');
+        prevType = 'op';
+      } else if (tk.value === '*') {
+        parts.push('<span class="expr-gap and-gap"></span>');
+        prevType = 'op';
+      }
+      return;
+    }
+    if (tk.type === 'paren') {
+      const cls = tk.value === '(' ? 'expr-paren open' : 'expr-paren close';
+      if (tk.value === '(' && (prevType === 'var' || prevType === 'close')) {
+        parts.push('<span class="expr-gap and-gap"></span>');
+      }
+      parts.push(`<span class="${cls}">${escapeHtml(tk.value)}</span>`);
+      prevType = tk.value === '(' ? 'open' : 'close';
+    }
+  });
+  return parts.join('') || '&nbsp;';
+}
+
+function syncExpressionInput(target, kmap, providedState = null) {
+  const state = providedState || getExpressionState(target, kmap);
+  const html = renderExpressionHtml(state.raw);
+  target.innerHTML = html;
+  if (state.selectionMode === 'select' && state.selectedTerm !== null) {
+    const termEl = target.querySelector(`[data-term-index="${state.selectedTerm}"]`);
+    if (termEl) termEl.classList.add('selected');
+  }
+  const tokens = normalizeExpressionTokens(state.raw);
+  const canonical = tokensToCanonical(tokens);
+  if (kmap) kmap.expression = canonical || state.raw.trim();
+}
+
+function insertIntoExpression(state, insertText) {
+  const left = state.raw.slice(0, state.caret);
+  const right = state.raw.slice(state.caret);
+  state.raw = `${left}${insertText}${right}`;
+  state.caret += insertText.length;
+}
+
+function removeFromExpression(state, count) {
+  if (state.caret === 0 || count <= 0) return;
+  const left = state.raw.slice(0, Math.max(0, state.caret - count));
+  const right = state.raw.slice(state.caret);
+  state.raw = `${left}${right}`;
+  state.caret = Math.max(0, state.caret - count);
+}
+
+function handleAutocomplete(state, variables) {
+  const prefix = state.raw.slice(0, state.caret).match(/[A-Za-z0-9_^~']+$/)?.[0] || '';
+  if (!prefix || state.caret !== state.raw.length) {
+    expressionAutocompleteState.set(state, { matches: [], index: 0, start: 0, prefix: '' });
+    return null;
+  }
+  const matches = buildAutocompleteMatches(prefix.replace(/^~/, ''), variables);
+  if (!matches.length) return null;
+  const entry = { matches, index: 0, start: state.caret - prefix.length, prefix };
+  expressionAutocompleteState.set(state, entry);
+  return entry;
+}
+
+function cycleAutocompleteState(editorState, direction) {
+  const entry = expressionAutocompleteState.get(editorState);
+  if (!entry || !(entry.matches || []).length) return null;
+  const len = entry.matches.length;
+  entry.index = (len + entry.index + direction) % len;
+  expressionAutocompleteState.set(editorState, entry);
+  return entry;
+}
+
+function applyAutocomplete(editorState) {
+  const entry = expressionAutocompleteState.get(editorState);
+  if (!entry || !(entry.matches || []).length) return false;
+  const suggestion = entry.matches[entry.index];
+  editorState.raw =
+    editorState.raw.slice(0, entry.start) + suggestion + editorState.raw.slice(editorState.caret);
+  editorState.caret = entry.start + suggestion.length;
+  return true;
+}
+
+function updateTermSelection(state, direction) {
+  const terms = normalizeExpressionTokens(state.raw || '').filter((tk) => tk.type === 'var');
+  if (!terms.length) {
+    state.selectedTerm = null;
+    state.selectionMode = null;
+    return;
+  }
+  if (state.selectedTerm === null) {
+    state.selectedTerm = direction < 0 ? terms.length - 1 : 0;
+    state.selectionMode = 'select';
+    return;
+  }
+  if (state.selectionMode === 'select') {
+    state.selectionMode = 'cursor';
+    return;
+  }
+  const next = state.selectedTerm + direction;
+  if (next < 0 || next >= terms.length) {
+    state.selectedTerm = null;
+    state.selectionMode = null;
+    return;
+  }
+  state.selectedTerm = next;
+  state.selectionMode = 'select';
 }
 
 function buildImplicitAndTokens(tokens) {
@@ -1447,7 +1532,7 @@ function buildExpressionTruthTable(expression, variables) {
 
 function buildKmapTruthTable(kmap) {
   const layout = buildKmapLayout(kmap);
-  const variables = [...layout.mapVars, ...layout.rowVars, ...layout.colVars];
+  const variables = [...layout.mapVars, ...layout.colVars, ...layout.rowVars];
   const table = new Map();
   const baseRows = layout.baseRows || 1;
   const baseCols = layout.baseCols || 1;
@@ -1458,9 +1543,9 @@ function buildKmapTruthTable(kmap) {
         (s) => r >= s.rowOffset && r < s.rowOffset + baseRows && c >= s.colOffset && c < s.colOffset + baseCols,
       );
       const mapBits = sub?.mapCode || ''.padEnd(layout.mapVars.length, '0');
-      const rowCode = layout.rowCodes[r - (sub?.rowOffset || 0)] || '';
       const colCode = layout.colCodes[c - (sub?.colOffset || 0)] || '';
-      const bits = `${mapBits}${rowCode}${colCode}`;
+      const rowCode = layout.rowCodes[r - (sub?.rowOffset || 0)] || '';
+      const bits = `${mapBits}${colCode}${rowCode}`;
       const assignment = {};
       variables.forEach((name, idx) => {
         assignment[name] = bits[idx] === '1';
@@ -1695,11 +1780,11 @@ function renderKmaps() {
     label.innerHTML = `${formatScriptedText(kmap.label || 'K-map')} ${symbol} =`;
     expressionRow.appendChild(label);
 
-    const exprInput = document.createElement('input');
-    exprInput.type = 'text';
-    exprInput.value = formatExpressionDisplay(kmap.expression || '', kmap.variables || []);
+    const exprInput = document.createElement('div');
+    exprInput.contentEditable = 'true';
     exprInput.dataset.kmapId = kmap.id;
     exprInput.classList.add('kmap-expression-input');
+    exprInput.innerHTML = renderExpressionHtml(kmap.expression || '');
     expressionRow.appendChild(exprInput);
 
     const verifyBtn = document.createElement('button');
@@ -2386,17 +2471,17 @@ function attachEvents() {
       kmap.cells[kmapCellKey(target.dataset.rowIndex, target.dataset.colIndex)] = val;
       markDirty();
     }
-    if (target.classList.contains('kmap-expression-input')) {
-      const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
-      if (!kmap) return;
-      syncExpressionInput(target, kmap);
-      markDirty();
-    }
   });
 
   kmapList.addEventListener('focusin', (e) => {
     if (e.target.classList.contains('kmap-cell-input')) {
       e.target.select();
+    }
+    if (e.target.classList.contains('kmap-expression-input')) {
+      const kmap = state.kmaps.find((m) => m.id.toString() === e.target.dataset.kmapId);
+      const editorState = getExpressionState(e.target, kmap);
+      editorState.caret = editorState.raw.length;
+      syncExpressionInput(e.target, kmap, editorState);
     }
   });
 
@@ -2404,30 +2489,70 @@ function attachEvents() {
     const target = e.target;
     if (target.classList.contains('kmap-expression-input')) {
       const key = e.key;
-      const autoState = expressionAutocompleteState.get(target) || {};
-      if (key === '_' || key === '^') {
-        autoState.scriptMode = key === '_' ? 'sub' : 'sup';
-        expressionAutocompleteState.set(target, autoState);
-        return;
-      }
-      if (key === 'ArrowRight' || key === 'Tab') {
-        autoState.scriptMode = null;
-        expressionAutocompleteState.set(target, autoState);
-      }
+      const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
+      if (!kmap) return;
+      const editorState = getExpressionState(target, kmap);
       if (key === 'Tab') {
-        if (autoState.matches && autoState.matches.length) {
+        const applied = applyAutocomplete(editorState);
+        if (applied) {
           e.preventDefault();
-          const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
-          target.setSelectionRange(target.selectionEnd, target.selectionEnd);
-          syncExpressionInput(target, kmap);
+          syncExpressionInput(target, kmap, editorState);
+          markDirty();
         }
         return;
       }
       if (key === 'ArrowDown' || key === 'ArrowUp') {
-        if (autoState.matches && autoState.matches.length) {
+        const cycled = cycleAutocompleteState(editorState, key === 'ArrowDown' ? 1 : -1);
+        if (cycled) {
           e.preventDefault();
-          cycleAutocomplete(target, key === 'ArrowDown' ? 1 : -1);
+          syncExpressionInput(target, kmap, editorState);
         }
+        return;
+      }
+      if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        e.preventDefault();
+        if (key === 'ArrowRight') editorState.scriptMode = null;
+        updateTermSelection(editorState, key === 'ArrowLeft' ? -1 : 1);
+        syncExpressionInput(target, kmap, editorState);
+        return;
+      }
+      if (key === 'Backspace') {
+        e.preventDefault();
+        removeFromExpression(editorState, 1);
+        editorState.selectionMode = null;
+        editorState.selectedTerm = null;
+        syncExpressionInput(target, kmap, editorState);
+        markDirty();
+        return;
+      }
+      if (key === 'Delete') {
+        e.preventDefault();
+        const right = editorState.raw.slice(editorState.caret + 1);
+        editorState.raw = editorState.raw.slice(0, editorState.caret) + right;
+        syncExpressionInput(target, kmap, editorState);
+        markDirty();
+        return;
+      }
+      if (key === '_' || key === '^') {
+        e.preventDefault();
+        editorState.scriptMode = key === '_' ? 'sub' : 'sup';
+        insertIntoExpression(editorState, key);
+        syncExpressionInput(target, kmap, editorState);
+        handleAutocomplete(editorState, kmap.variables);
+        markDirty();
+        return;
+      }
+      if (key.length === 1) {
+        e.preventDefault();
+        const insertChar = key === '*' ? ' ' : key;
+        insertIntoExpression(editorState, insertChar);
+        if (key === ' ') {
+          editorState.selectionMode = null;
+          editorState.selectedTerm = null;
+        }
+        syncExpressionInput(target, kmap, editorState);
+        handleAutocomplete(editorState, kmap.variables);
+        markDirty();
         return;
       }
       return;
