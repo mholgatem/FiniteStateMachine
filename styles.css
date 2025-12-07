@@ -722,7 +722,7 @@ svg text {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
-.kmap-card h4 {
+.kmap-card .kmap-title {
   margin: 0 0 0.35rem;
   display: flex;
   align-items: center;
@@ -853,6 +853,16 @@ svg text {
 
 .kmap-expression input {
   min-width: 200px;
+}
+
+.kmap-expression button.verified {
+  background: #0f9d58;
+  color: #fff;
+}
+
+.kmap-expression button.failed {
+  background: #c53030;
+  color: #fff;
 }
 
 .kmap-resize-handle {

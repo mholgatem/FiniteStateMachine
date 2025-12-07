@@ -1070,6 +1070,428 @@ function formatVariableList(vars) {
   return vars.map((v) => formatScriptedText(v)).join(', ') || '—';
 }
 
+const expressionAutocompleteState = new WeakMap();
+
+function stripOverlines(text) {
+  return (text || '').replace(/\u0305/g, '');
+}
+
+function applyOverline(text) {
+  return (text || '')
+    .split('')
+    .map((ch) => (ch.trim() ? `${ch}\u0305` : ch))
+    .join('');
+}
+
+function tokenizeExpressionInput(raw) {
+  const tokens = [];
+  const src = stripOverlines(raw);
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (/\s/.test(ch)) {
+      i += 1;
+      continue;
+    }
+    if (ch === '+') {
+      tokens.push({ type: 'op', value: '+' });
+      i += 1;
+      continue;
+    }
+    if (ch === '*') {
+      tokens.push({ type: 'op', value: '*' });
+      i += 1;
+      continue;
+    }
+    if (ch === '~') {
+      tokens.push({ type: 'not' });
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      tokens.push({ type: 'not-post' });
+      i += 1;
+      continue;
+    }
+    if (ch === '(' || ch === ')') {
+      tokens.push({ type: 'paren', value: ch });
+      i += 1;
+      continue;
+    }
+    if (/[A-Za-z0-9_^]/.test(ch)) {
+      let start = i;
+      while (i < src.length && /[A-Za-z0-9_^]/.test(src[i])) i += 1;
+      tokens.push({ type: 'var', value: src.slice(start, i) });
+      continue;
+    }
+    i += 1;
+  }
+  return tokens;
+}
+
+function normalizeExpressionTokens(raw) {
+  const tokens = tokenizeExpressionInput(raw);
+  const normalized = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tk = tokens[i];
+    if (tk.type === 'var') {
+      let negated = false;
+      if (i > 0 && tokens[i - 1].type === 'not') {
+        negated = true;
+      }
+      if (i + 1 < tokens.length && tokens[i + 1].type === 'not-post') {
+        negated = true;
+        i += 1;
+      }
+      normalized.push({ type: 'var', value: tk.value, negated });
+      continue;
+    }
+    if (tk.type === 'not') {
+      const next = tokens[i + 1];
+      if (!next || next.type !== 'var') {
+        normalized.push({ type: 'not' });
+      }
+      continue;
+    }
+    if (tk.type === 'op' || tk.type === 'paren') {
+      normalized.push(tk);
+    }
+  }
+  return normalized;
+}
+
+function tokensToCanonical(tokens) {
+  const parts = [];
+  let prevType = null;
+  tokens.forEach((tk, idx) => {
+    if (tk.type === 'var') {
+      const name = tk.value;
+      const base = tk.negated ? `~${name}` : name;
+      if (prevType === 'var' || prevType === 'close') {
+        parts.push(' ');
+      }
+      parts.push(base);
+      prevType = 'var';
+      return;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '+') {
+        parts.push(' + ');
+      } else if (tk.value === '*') {
+        parts.push(' ');
+      }
+      prevType = 'op';
+      return;
+    }
+    if (tk.type === 'not') {
+      parts.push('~');
+      prevType = 'not';
+      return;
+    }
+    if (tk.type === 'paren') {
+      if (tk.value === '(' && (prevType === 'var' || prevType === 'close')) {
+        parts.push(' ');
+      }
+      parts.push(tk.value);
+      prevType = tk.value === '(' ? 'open' : 'close';
+    }
+    if (idx === tokens.length - 1) prevType = tk.type;
+  });
+  return parts.join('').replace(/\s+/g, ' ').trim();
+}
+
+function tokensToDisplay(tokens) {
+  const parts = [];
+  let prevType = null;
+  tokens.forEach((tk) => {
+    if (tk.type === 'var') {
+      const rendered = tk.negated ? applyOverline(tk.value) : tk.value;
+      const withMarker = tk.negated ? `~${rendered}` : rendered;
+      if (prevType === 'var' || prevType === 'close') {
+        parts.push(' ');
+      }
+      parts.push(withMarker);
+      prevType = 'var';
+      return;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '+') {
+        parts.push('   +   ');
+        prevType = 'op';
+        return;
+      }
+      if (prevType && tk.value === '*') {
+        parts.push(' ');
+        prevType = 'op';
+        return;
+      }
+    }
+    if (tk.type === 'not') {
+      parts.push('~');
+      prevType = 'not';
+      return;
+    }
+    if (tk.type === 'paren') {
+      if (tk.value === '(' && (prevType === 'var' || prevType === 'close')) {
+        parts.push(' ');
+      }
+      parts.push(tk.value);
+      prevType = tk.value === '(' ? 'open' : 'close';
+    }
+  });
+  return parts.join('').trim();
+}
+
+function formatExpressionDisplay(raw, variables) {
+  const tokens = normalizeExpressionTokens(raw);
+  const canonical = tokensToCanonical(tokens);
+  const display = tokensToDisplay(tokens);
+  const result = display || canonical || '';
+  return result;
+}
+
+function normalizeVarName(name) {
+  return stripOverlines(name || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function syncExpressionInput(target, kmap) {
+  const caret = target.selectionStart ?? target.value.length;
+  const rendered = formatExpressionDisplay(target.value, kmap?.variables || []);
+  target.value = rendered;
+  applyAutocompletePreview(target, kmap?.variables || [], caret);
+  const finalTokens = normalizeExpressionTokens(target.value);
+  const canonical = tokensToCanonical(finalTokens);
+  if (kmap) kmap.expression = canonical || target.value.trim();
+}
+
+function buildAutocompleteMatches(prefix, variables) {
+  const clean = normalizeVarName(prefix);
+  if (!clean) return [];
+  return (variables || []).filter((v) => normalizeVarName(v).startsWith(clean));
+}
+
+function applyAutocompletePreview(input, variables, caretPosition) {
+  const state = expressionAutocompleteState.get(input) || {};
+  if (state.scriptMode) {
+    input.setSelectionRange(caretPosition, caretPosition);
+    expressionAutocompleteState.set(input, state);
+    return;
+  }
+  const value = input.value;
+  const start = Math.max(
+    0,
+    (() => {
+      for (let idx = caretPosition - 1; idx >= 0; idx -= 1) {
+        if (!/[A-Za-z0-9_^]/.test(value[idx])) return idx + 1;
+      }
+      return 0;
+    })(),
+  );
+  const prefix = value.slice(start, caretPosition);
+  const beforePrefix = value[start - 1] || '';
+  if (beforePrefix === '(') {
+    input.setSelectionRange(caretPosition, caretPosition);
+    expressionAutocompleteState.set(input, { matches: [], index: 0, start, prefix });
+    return;
+  }
+  const matches = buildAutocompleteMatches(prefix, variables);
+  if (!matches.length || !prefix) {
+    input.setSelectionRange(caretPosition, caretPosition);
+    expressionAutocompleteState.set(input, { matches: [], index: 0, start, prefix });
+    return;
+  }
+  const index = Math.min(state.index || 0, matches.length - 1);
+  const suggestion = matches[index];
+  const preview = value.slice(0, start) + suggestion + value.slice(caretPosition);
+  input.value = preview;
+  const selStart = start + prefix.length;
+  const selEnd = start + suggestion.length;
+  input.setSelectionRange(selStart, selEnd);
+  expressionAutocompleteState.set(input, { matches, index, start, prefix });
+}
+
+function cycleAutocomplete(input, direction) {
+  const state = expressionAutocompleteState.get(input);
+  if (!state || !(state.matches || []).length) return;
+  const len = state.matches.length;
+  state.index = (len + state.index + direction) % len;
+  const caret = state.start + (state.prefix || '').length;
+  input.value =
+    input.value.slice(0, state.start) + state.matches[state.index] + input.value.slice(caret);
+  const selStart = state.start + (state.prefix || '').length;
+  const selEnd = state.start + state.matches[state.index].length;
+  input.setSelectionRange(selStart, selEnd);
+  expressionAutocompleteState.set(input, state);
+}
+
+function buildImplicitAndTokens(tokens) {
+  const result = [];
+  tokens.forEach((tk, idx) => {
+    result.push(tk);
+    const next = tokens[idx + 1];
+    if (!next) return;
+    const isLeft = tk.type === 'var' || (tk.type === 'paren' && tk.value === ')');
+    const isRight =
+      next.type === 'var' || next.type === 'not' || (next.type === 'paren' && next.value === '(');
+    if (isLeft && isRight) {
+      result.push({ type: 'op', value: '*' });
+    }
+  });
+  return result;
+}
+
+function toRpn(tokens) {
+  const output = [];
+  const ops = [];
+  const prec = { '~': 3, '*': 2, '+': 1 };
+  const assoc = { '~': 'right', '*': 'left', '+': 'left' };
+  tokens.forEach((tk) => {
+    if (tk.type === 'var') {
+      output.push(tk);
+      return;
+    }
+    if (tk.type === 'not' || tk.type === 'not-post') {
+      const op = '~';
+      while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[op]) {
+        output.push({ type: 'op', value: ops.pop() });
+      }
+      ops.push(op);
+      return;
+    }
+    if (tk.type === 'op') {
+      const op = tk.value;
+      while (
+        ops.length &&
+        ops[ops.length - 1] !== '(' &&
+        (prec[ops[ops.length - 1]] > prec[op] ||
+          (prec[ops[ops.length - 1]] === prec[op] && assoc[op] === 'left'))
+      ) {
+        output.push({ type: 'op', value: ops.pop() });
+      }
+      ops.push(op);
+      return;
+    }
+    if (tk.type === 'paren') {
+      if (tk.value === '(') {
+        ops.push('(');
+      } else {
+        while (ops.length && ops[ops.length - 1] !== '(') {
+          output.push({ type: 'op', value: ops.pop() });
+        }
+        ops.pop();
+      }
+    }
+  });
+  while (ops.length) {
+    output.push({ type: 'op', value: ops.pop() });
+  }
+  return output;
+}
+
+function evaluateRpn(rpn, assignmentGetter) {
+  const stack = [];
+  for (let i = 0; i < rpn.length; i += 1) {
+    const tk = rpn[i];
+    if (tk.type === 'var') {
+      const value = assignmentGetter(tk.value);
+      if (value === undefined) return null;
+      stack.push(Boolean(value));
+      continue;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '~') {
+        const a = stack.pop();
+        if (a === undefined) return null;
+        stack.push(!a);
+        continue;
+      }
+      const b = stack.pop();
+      const a = stack.pop();
+      if (a === undefined || b === undefined) return null;
+      if (tk.value === '*') stack.push(a && b);
+      else if (tk.value === '+') stack.push(a || b);
+    }
+  }
+  const result = stack.pop();
+  if (result === undefined || stack.length) return null;
+  return result;
+}
+
+function buildExpressionTruthTable(expression, variables) {
+  const cleanExpr = stripOverlines(expression || '').replace(/\s+/g, ' ').trim();
+  if (!cleanExpr) return null;
+  const tokens = tokenizeExpressionInput(cleanExpr);
+  const prepared = buildImplicitAndTokens(tokens);
+  const rpn = toRpn(prepared);
+  const table = new Map();
+  const normalizedVars = (variables || []).map((v) => ({ raw: v, norm: normalizeVarName(v) }));
+
+  const total = Math.pow(2, normalizedVars.length);
+  for (let i = 0; i < total; i += 1) {
+    const assignment = {};
+    normalizedVars.forEach((v, idx) => {
+      const bit = (i >> (normalizedVars.length - idx - 1)) & 1;
+      assignment[v.raw] = bit === 1;
+      assignment[v.norm] = bit === 1;
+    });
+    const evalAssignment = (name) => assignment[name] ?? assignment[normalizeVarName(name)];
+    const value = evaluateRpn(rpn, (name) => evalAssignment(name));
+    if (value === null) return null;
+    const key = normalizedVars
+      .map((v) => (assignment[v.raw] ? '1' : '0'))
+      .join('');
+    table.set(key, value ? '1' : '0');
+  }
+  return table;
+}
+
+function buildKmapTruthTable(kmap) {
+  const layout = buildKmapLayout(kmap);
+  const variables = [...layout.mapVars, ...layout.rowVars, ...layout.colVars];
+  const table = new Map();
+  const baseRows = layout.baseRows || 1;
+  const baseCols = layout.baseCols || 1;
+
+  for (let r = 0; r < layout.totalRows; r += 1) {
+    for (let c = 0; c < layout.totalCols; c += 1) {
+      const sub = layout.submaps.find(
+        (s) => r >= s.rowOffset && r < s.rowOffset + baseRows && c >= s.colOffset && c < s.colOffset + baseCols,
+      );
+      const mapBits = sub?.mapCode || ''.padEnd(layout.mapVars.length, '0');
+      const rowCode = layout.rowCodes[r - (sub?.rowOffset || 0)] || '';
+      const colCode = layout.colCodes[c - (sub?.colOffset || 0)] || '';
+      const bits = `${mapBits}${rowCode}${colCode}`;
+      const assignment = {};
+      variables.forEach((name, idx) => {
+        assignment[name] = bits[idx] === '1';
+      });
+      const key = variables.map((v) => (assignment[v] ? '1' : '0')).join('');
+      const cellVal = (kmap.cells && kmap.cells[kmapCellKey(r, c)]) || '';
+      table.set(key, cellVal || 'X');
+    }
+  }
+
+  return { table, variables };
+}
+
+function verifyKmapExpression(kmap) {
+  if (!kmap) return { passed: false, reason: 'No k-map selected' };
+  const kmapTable = buildKmapTruthTable(kmap);
+  const canonical = tokensToCanonical(normalizeExpressionTokens(kmap.expression || ''));
+  const exprTable = buildExpressionTruthTable(canonical, kmapTable.variables);
+  if (!exprTable) return { passed: false, reason: 'Expression is invalid or empty' };
+  for (const [key, value] of kmapTable.table.entries()) {
+    if (value === 'X') continue;
+    const expected = value === '1';
+    const exprVal = exprTable.get(key);
+    if (exprVal === undefined) return { passed: false, reason: 'Expression incomplete' };
+    if ((exprVal === '1') !== expected) {
+      return { passed: false, reason: 'Expression output does not match K-map' };
+    }
+  }
+  return { passed: true };
+}
+
 function buildKmapLayout(kmap) {
   const variables = kmap.variables || [];
   const mapVarCount = Math.max(0, variables.length - 4);
@@ -1233,7 +1655,8 @@ function renderKmaps() {
     card.dataset.totalRows = layout.totalRows;
     card.dataset.totalCols = layout.totalCols;
 
-    const heading = document.createElement('h4');
+    const heading = document.createElement('span');
+    heading.className = 'kmap-title';
     heading.innerHTML = formatScriptedText(kmap.label || 'K-map');
     card.appendChild(heading);
 
@@ -1274,8 +1697,7 @@ function renderKmaps() {
 
     const exprInput = document.createElement('input');
     exprInput.type = 'text';
-    exprInput.value = kmap.expression || '';
-    exprInput.disabled = true;
+    exprInput.value = formatExpressionDisplay(kmap.expression || '', kmap.variables || []);
     exprInput.dataset.kmapId = kmap.id;
     exprInput.classList.add('kmap-expression-input');
     expressionRow.appendChild(exprInput);
@@ -1283,7 +1705,7 @@ function renderKmaps() {
     const verifyBtn = document.createElement('button');
     verifyBtn.textContent = 'Verify';
     verifyBtn.type = 'button';
-    verifyBtn.disabled = true;
+    verifyBtn.dataset.verifyKmap = kmap.id;
     expressionRow.appendChild(verifyBtn);
 
     const removeBtn = document.createElement('button');
@@ -1967,7 +2389,7 @@ function attachEvents() {
     if (target.classList.contains('kmap-expression-input')) {
       const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
       if (!kmap) return;
-      kmap.expression = target.value;
+      syncExpressionInput(target, kmap);
       markDirty();
     }
   });
@@ -1980,6 +2402,36 @@ function attachEvents() {
 
   kmapList.addEventListener('keydown', (e) => {
     const target = e.target;
+    if (target.classList.contains('kmap-expression-input')) {
+      const key = e.key;
+      const autoState = expressionAutocompleteState.get(target) || {};
+      if (key === '_' || key === '^') {
+        autoState.scriptMode = key === '_' ? 'sub' : 'sup';
+        expressionAutocompleteState.set(target, autoState);
+        return;
+      }
+      if (key === 'ArrowRight' || key === 'Tab') {
+        autoState.scriptMode = null;
+        expressionAutocompleteState.set(target, autoState);
+      }
+      if (key === 'Tab') {
+        if (autoState.matches && autoState.matches.length) {
+          e.preventDefault();
+          const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
+          target.setSelectionRange(target.selectionEnd, target.selectionEnd);
+          syncExpressionInput(target, kmap);
+        }
+        return;
+      }
+      if (key === 'ArrowDown' || key === 'ArrowUp') {
+        if (autoState.matches && autoState.matches.length) {
+          e.preventDefault();
+          cycleAutocomplete(target, key === 'ArrowDown' ? 1 : -1);
+        }
+        return;
+      }
+      return;
+    }
     if (!target.classList.contains('kmap-cell-input')) return;
     const { key } = e;
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
@@ -2014,6 +2466,18 @@ function attachEvents() {
       state.kmaps = state.kmaps.filter((k) => k.id.toString() !== id);
       renderKmaps();
       markDirty();
+      return;
+    }
+
+    const verifyBtn = e.target.closest('[data-verify-kmap]');
+    if (verifyBtn) {
+      const kmap = state.kmaps.find((m) => m.id.toString() === verifyBtn.dataset.verifyKmap);
+      const result = verifyKmapExpression(kmap);
+      verifyBtn.classList.toggle('verified', !!result.passed);
+      verifyBtn.classList.toggle('failed', !result.passed);
+      verifyBtn.title = result.passed
+        ? 'Expression matches K-map'
+        : result.reason || 'Expression verification failed';
     }
   });
 
