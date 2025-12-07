@@ -1067,7 +1067,7 @@ function grayCode(bits) {
 }
 
 function formatVariableList(vars) {
-  return vars.join(', ') || '—';
+  return vars.map((v) => formatScriptedText(v)).join(', ') || '—';
 }
 
 function buildKmapLayout(kmap) {
@@ -1158,7 +1158,7 @@ function buildKmapCornerLabel(layout) {
       const span = document.createElement('span');
       const positionClass = idx === 0 ? 'kmap-var-top' : idx === 1 ? 'kmap-var-bottom' : '';
       span.className = `kmap-var ${positionClass}`.trim();
-      span.textContent = name;
+      span.innerHTML = formatScriptedText(name);
       block.appendChild(span);
     });
     return block;
@@ -1275,6 +1275,7 @@ function renderKmaps() {
     const exprInput = document.createElement('input');
     exprInput.type = 'text';
     exprInput.value = kmap.expression || '';
+    exprInput.disabled = true;
     exprInput.dataset.kmapId = kmap.id;
     exprInput.classList.add('kmap-expression-input');
     expressionRow.appendChild(exprInput);
