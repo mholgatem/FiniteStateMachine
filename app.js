@@ -1865,9 +1865,6 @@ function renderKmaps() {
     const expressionRow = document.createElement('div');
     expressionRow.className = 'kmap-expression';
     const symbol = kmap.type === 'pos' ? 'Π' : 'Σ';
-    const label = document.createElement('span');
-    label.innerHTML = `${formatScriptedText(kmap.label || 'K-map')} ${symbol} =`;
-    expressionRow.appendChild(label);
 
     const variableTray = document.createElement('div');
     variableTray.className = 'kmap-variable-tray';
@@ -1886,6 +1883,11 @@ function renderKmaps() {
     });
     variableTray.appendChild(trayItems);
     expressionRow.appendChild(variableTray);
+
+    const label = document.createElement('span');
+    label.className = 'kmap-expression-label';
+    label.innerHTML = `${formatScriptedText(kmap.label || 'K-map')} ${symbol} =`;
+    expressionRow.appendChild(label);
 
     const exprTrayWrapper = document.createElement('div');
     exprTrayWrapper.className = 'kmap-expression-tray-wrapper';
