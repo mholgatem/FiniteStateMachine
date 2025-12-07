@@ -787,7 +787,20 @@ svg text {
 .kmap-corner-label .kmap-diagonal {
   position: absolute;
   inset: 0.35rem;
-  background: linear-gradient(135deg, transparent 48%, var(--border) 50%, transparent 52%);
+  /* remove the gradient */
+  background: none;
+}
+
+.kmap-corner-label .kmap-diagonal::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border);
+  /* adjust sign of the angle to flip direction if needed */
+  transform: rotate(45deg);
+  transform-origin: center;
 }
 
 .kmap-corner-label .kmap-variable-block {
@@ -798,12 +811,24 @@ svg text {
   font-size: 0.85rem;
 }
 
+/* keep same general placement as before */
 .kmap-corner-label .kmap-vars-row {
-  align-self: start;
+  align-self: flex-start;
+  transform: translateY(-2px);   /* move the row vars up a bit */
 }
 
 .kmap-corner-label .kmap-vars-col {
-  align-self: end;
+  align-self: flex-end;
+  transform: translateY(2px);    /* move the column vars down a bit */
+}
+
+/* per-letter offsets */
+.kmap-var-top {
+  transform: translateY(-1px);   /* slightly higher */
+}
+
+.kmap-var-bottom {
+  transform: translateY(1px);    /* slightly lower */
 }
 
 .kmap-expression {

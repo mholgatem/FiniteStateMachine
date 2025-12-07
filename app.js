@@ -1150,15 +1150,22 @@ function buildKmapCornerLabel(layout) {
   diagonal.className = 'kmap-diagonal';
   corner.appendChild(diagonal);
 
-  const rowVars = document.createElement('div');
-  rowVars.className = 'kmap-variable-block kmap-vars-row';
-  rowVars.textContent = formatVariableList(layout.rowVars);
-  corner.appendChild(rowVars);
+  const buildBlock = (vars, blockClass) => {
+    const block = document.createElement('div');
+    block.className = `kmap-variable-block ${blockClass}`;
+    const list = vars.length ? vars : ['—'];
+    list.forEach((name, idx) => {
+      const span = document.createElement('span');
+      const positionClass = idx === 0 ? 'kmap-var-top' : idx === 1 ? 'kmap-var-bottom' : '';
+      span.className = `kmap-var ${positionClass}`.trim();
+      span.textContent = name;
+      block.appendChild(span);
+    });
+    return block;
+  };
 
-  const colVars = document.createElement('div');
-  colVars.className = 'kmap-variable-block kmap-vars-col';
-  colVars.textContent = formatVariableList(layout.colVars);
-  corner.appendChild(colVars);
+  corner.appendChild(buildBlock(layout.rowVars, 'kmap-vars-row'));
+  corner.appendChild(buildBlock(layout.colVars, 'kmap-vars-col'));
   return corner;
 }
 
