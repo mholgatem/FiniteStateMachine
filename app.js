@@ -1670,8 +1670,15 @@ function buildKmapLayout(kmap) {
   if (lessSig.length === 0 && moreSig.length > 1) {
     lessSig = [moreSig.pop()];
   }
-  let rowVars = kmap.direction === 'vertical' ? lessSig : moreSig;
-  let colVars = kmap.direction === 'vertical' ? moreSig : lessSig;
+  let rowVars;
+  let colVars;
+  if (kmap.direction === 'vertical') {
+    rowVars = moreSig;
+    colVars = lessSig;
+  } else {
+    rowVars = lessSig;
+    colVars = moreSig;
+  }
   if (rowVars.length === 0 && colVars.length) {
     rowVars = [colVars.shift()];
   }
@@ -2610,16 +2617,16 @@ function attachEvents() {
     const tokens = [...(getKmapById(tray.dataset.kmapId)?.expressionTokens || [])];
     const targetToken = e.target.closest('.kmap-expr-token');
     const marker = ensureDropMarker(tray);
-    let index = tokens.length;
     if (targetToken && targetToken.parentNode === tray) {
       const rect = targetToken.getBoundingClientRect();
       const before = e.clientX < rect.left + rect.width / 2;
-      index = parseInt(targetToken.dataset.index, 10);
-      if (!Number.isNaN(index) && !before) index += 1;
       tray.insertBefore(marker, before ? targetToken : targetToken.nextSibling);
     } else if (!marker.parentNode) {
       tray.appendChild(marker);
     }
+    const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = sequence.indexOf(marker);
+    const index = markerIndex === -1 ? tokens.length : markerIndex;
     marker.dataset.index = index;
   });
 
@@ -2635,7 +2642,7 @@ function attachEvents() {
     if (!tray) return;
     e.preventDefault();
     const marker = tray.querySelector('.kmap-drop-marker');
-    let index = marker ? parseInt(marker.dataset.index || '0', 10) : 0;
+    let index = 0;
     clearDropMarker(tray);
     const kmap = getKmapById(tray.dataset.kmapId);
     if (!kmap) return;
@@ -2644,6 +2651,12 @@ function attachEvents() {
     kmapExpressionDragState = null;
     if (!payload || !payload.type) return;
 
+    if (marker && marker.parentNode === tray) {
+      const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+      const markerIndex = sequence.indexOf(marker);
+      index = markerIndex === -1 ? tokens.length : markerIndex;
+    }
+    
     if (payload.source === 'expression' && payload.kmapId === kmap.id.toString()) {
       if (!Number.isNaN(payload.fromIndex)) {
         tokens.splice(payload.fromIndex, 1);

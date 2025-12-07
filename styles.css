@@ -903,12 +903,12 @@ svg text {
 /* keep same general placement as before */
 .kmap-corner-label .kmap-vars-row {
   align-self: flex-start;
-  transform: translateY(5px) translateX(20px);
+  transform: translateY(20px) translateX(-10px);
 }
 
 .kmap-corner-label .kmap-vars-col {
   align-self: flex-end;
-  transform: translateY(-8px) translateX(-10px);
+  transform: translateY(-15px) translateX(20px);
 }
 
 /* per-letter offsets */
