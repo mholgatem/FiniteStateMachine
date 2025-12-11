@@ -885,7 +885,7 @@ function limitArrowPointOnTarget(fromState, targetState, cursorPoint) {
   const dir = { x: cursorPoint.x - fromState.x, y: cursorPoint.y - fromState.y };
   const dirLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
   const centersDistance = Math.hypot(targetState.x - fromState.x, targetState.y - fromState.y);
-  const maxLen = Math.max(0, centersDistance - fromState.radius);
+  const maxLen = Math.max(0, centersDistance);
   const clampedLen = Math.min(dirLen, maxLen);
   let projected = {
     x: fromState.x + (dir.x / dirLen) * clampedLen,
