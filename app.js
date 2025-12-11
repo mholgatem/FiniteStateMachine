@@ -862,6 +862,25 @@ function quadraticPath(from, to, arcOffset = 0) {
   return { d: `M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`, ctrl: { x: cx, y: cy } };
 }
 
+function findStateAtPoint(pt) {
+  return state.states.find((st) => {
+    if (!st.placed) return false;
+    const dist = Math.hypot(pt.x - st.x, pt.y - st.y);
+    return dist <= st.radius;
+  });
+}
+
+function projectPointToStateBorder(st, pt) {
+  const dx = pt.x - st.x;
+  const dy = pt.y - st.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const scale = st.radius / len;
+  return {
+    x: st.x + dx * scale,
+    y: st.y + dy * scale,
+  };
+}
+
 function selfLoopPath(node, tr) {
   const angle = tr.loopAngle !== undefined ? tr.loopAngle : -Math.PI / 2;
   const sweep = Math.PI / 1.8;
@@ -944,7 +963,11 @@ function drawPreview() {
   if (!currentArrow || !currentArrow.toPoint) return;
   const from = state.states.find((s) => s.id === currentArrow.from);
   if (!from) return;
-  const to = { x: currentArrow.toPoint.x, y: currentArrow.toPoint.y, radius: 0 };
+  const to = {
+    x: currentArrow.toPoint.x,
+    y: currentArrow.toPoint.y,
+    radius: currentArrow.toPoint.radius || 0,
+  };
   const pathInfo = quadraticPath(from, to, currentArrow.arcOffset || 0);
   if (!previewPath) {
     previewPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -2231,6 +2254,14 @@ function deleteTransitionById(transitionId) {
 function undoLastDelete() {
   const action = undoStack.pop();
   if (!action) return;
+  if (action.type === 'transitionAddition') {
+    const idx = state.transitions.findIndex((t) => t.id === action.transitionId);
+    if (idx !== -1) state.transitions.splice(idx, 1);
+    if (selectedArrowId === action.transitionId) selectedArrowId = null;
+    renderDiagram();
+    markDirty();
+    return;
+  }
   if (action.type === 'transitionDeletion') {
     state.transitions.push(action.transition);
     selectedArrowId = action.transition.id;
@@ -2950,7 +2981,7 @@ function attachEvents() {
         const toId = parseInt(targetState.parentNode.dataset.id, 10);
         const newId = Date.now();
         const isSelfLoop = toId === currentArrow.from;
-        state.transitions.push({
+        const newTransition = {
           id: newId,
           from: currentArrow.from,
           to: toId,
@@ -2961,7 +2992,9 @@ function attachEvents() {
           inputValues: defaultSelections(state.inputs.length),
           outputValues: defaultSelections(state.outputs.length),
           labelT: 0.12,
-        });
+        };
+        state.transitions.push(newTransition);
+        undoStack.push({ type: 'transitionAddition', transitionId: newId });
         selectedArrowId = newId;
         renderDiagram();
         markDirty();
@@ -3039,7 +3072,13 @@ function attachEvents() {
       return;
     }
     if (currentArrow) {
-      currentArrow.toPoint = getSVGPoint(e.clientX, e.clientY);
+      const cursorPoint = getSVGPoint(e.clientX, e.clientY);
+      const hoveredState = findStateAtPoint(cursorPoint);
+      if (hoveredState) {
+        currentArrow.toPoint = projectPointToStateBorder(hoveredState, cursorPoint);
+      } else {
+        currentArrow.toPoint = cursorPoint;
+      }
       renderDiagram();
     }
   });
