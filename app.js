@@ -900,7 +900,7 @@ function limitArrowPointOnTarget(fromState, targetState, cursorPoint) {
       y: targetState.y + toTarget.y * scale,
     };
   }
-  return { ...projected, radius: targetState.radius };
+  return { ...projected, radius: 0 };
 }
 
 function selfLoopPath(node, tr) {
