@@ -881,6 +881,26 @@ function projectPointToStateBorder(st, pt) {
   };
 }
 
+function clampAngleAround(center, angle, maxDelta) {
+  let diff = angle - center;
+  while (diff <= -Math.PI) diff += 2 * Math.PI;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  const limited = Math.max(-maxDelta, Math.min(maxDelta, diff));
+  return center + limited;
+}
+
+function limitArrowPointOnTarget(fromState, targetState, cursorPoint) {
+  const baseAngle = Math.atan2(fromState.y - targetState.y, fromState.x - targetState.x);
+  const cursorAngle = Math.atan2(cursorPoint.y - targetState.y, cursorPoint.x - targetState.x);
+  const allowedSpread = (3 * Math.PI) / 4; // 3/8 of a circle in either direction
+  const clampedAngle = clampAngleAround(baseAngle, cursorAngle, allowedSpread);
+  return {
+    x: targetState.x + Math.cos(clampedAngle) * targetState.radius,
+    y: targetState.y + Math.sin(clampedAngle) * targetState.radius,
+    radius: targetState.radius,
+  };
+}
+
 function selfLoopPath(node, tr) {
   const angle = tr.loopAngle !== undefined ? tr.loopAngle : -Math.PI / 2;
   const sweep = Math.PI / 1.8;
@@ -963,17 +983,21 @@ function drawPreview() {
   if (!currentArrow || !currentArrow.toPoint) return;
   const from = state.states.find((s) => s.id === currentArrow.from);
   if (!from) return;
+  const isSelfPreview = currentArrow.targetId === from.id;
   const to = {
     x: currentArrow.toPoint.x,
     y: currentArrow.toPoint.y,
     radius: currentArrow.toPoint.radius || 0,
   };
-  const pathInfo = quadraticPath(from, to, currentArrow.arcOffset || 0);
+  const pathInfo = isSelfPreview
+    ? selfLoopPath(from, { loopAngle: currentArrow.loopAngle ?? -Math.PI / 2, arcOffset: 30 })
+    : quadraticPath(from, to, currentArrow.arcOffset || 0);
   if (!previewPath) {
     previewPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     previewPath.classList.add('arrow-path');
     previewPath.setAttribute('stroke-dasharray', '6 4');
   }
+  previewPath.classList.toggle('self-loop', isSelfPreview);
   previewPath.setAttribute('d', pathInfo.d);
   viewport.appendChild(previewPath);
 }
@@ -2981,6 +3005,11 @@ function attachEvents() {
         const toId = parseInt(targetState.parentNode.dataset.id, 10);
         const newId = Date.now();
         const isSelfLoop = toId === currentArrow.from;
+        const loopAngle = isSelfLoop
+          ? currentArrow.loopAngle !== undefined
+            ? currentArrow.loopAngle
+            : -Math.PI / 2
+          : undefined;
         const newTransition = {
           id: newId,
           from: currentArrow.from,
@@ -2988,7 +3017,7 @@ function attachEvents() {
           inputs: '',
           outputs: '',
           arcOffset: isSelfLoop ? 30 : 0,
-          loopAngle: isSelfLoop ? -Math.PI / 2 : undefined,
+          loopAngle,
           inputValues: defaultSelections(state.inputs.length),
           outputValues: defaultSelections(state.outputs.length),
           labelT: 0.12,
@@ -3074,8 +3103,18 @@ function attachEvents() {
     if (currentArrow) {
       const cursorPoint = getSVGPoint(e.clientX, e.clientY);
       const hoveredState = findStateAtPoint(cursorPoint);
-      if (hoveredState) {
-        currentArrow.toPoint = projectPointToStateBorder(hoveredState, cursorPoint);
+      const fromState = state.states.find((s) => s.id === currentArrow.from);
+      currentArrow.targetId = null;
+      currentArrow.loopAngle = undefined;
+      if (hoveredState && fromState) {
+        if (hoveredState.id === fromState.id) {
+          currentArrow.loopAngle = Math.atan2(cursorPoint.y - hoveredState.y, cursorPoint.x - hoveredState.x);
+          currentArrow.targetId = hoveredState.id;
+          currentArrow.toPoint = { ...projectPointToStateBorder(hoveredState, cursorPoint), radius: hoveredState.radius };
+        } else {
+          currentArrow.targetId = hoveredState.id;
+          currentArrow.toPoint = limitArrowPointOnTarget(fromState, hoveredState, cursorPoint);
+        }
       } else {
         currentArrow.toPoint = cursorPoint;
       }
