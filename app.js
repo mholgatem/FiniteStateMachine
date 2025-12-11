@@ -881,24 +881,26 @@ function projectPointToStateBorder(st, pt) {
   };
 }
 
-function clampAngleAround(center, angle, maxDelta) {
-  let diff = angle - center;
-  while (diff <= -Math.PI) diff += 2 * Math.PI;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  const limited = Math.max(-maxDelta, Math.min(maxDelta, diff));
-  return center + limited;
-}
-
 function limitArrowPointOnTarget(fromState, targetState, cursorPoint) {
-  const baseAngle = Math.atan2(fromState.y - targetState.y, fromState.x - targetState.x);
-  const cursorAngle = Math.atan2(cursorPoint.y - targetState.y, cursorPoint.x - targetState.x);
-  const allowedSpread = (3 * Math.PI) / 4; // 3/8 of a circle in either direction
-  const clampedAngle = clampAngleAround(baseAngle, cursorAngle, allowedSpread);
-  return {
-    x: targetState.x + Math.cos(clampedAngle) * targetState.radius,
-    y: targetState.y + Math.sin(clampedAngle) * targetState.radius,
-    radius: targetState.radius,
+  const dir = { x: cursorPoint.x - fromState.x, y: cursorPoint.y - fromState.y };
+  const dirLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+  const centersDistance = Math.hypot(targetState.x - fromState.x, targetState.y - fromState.y);
+  const maxLen = Math.max(0, centersDistance - fromState.radius);
+  const clampedLen = Math.min(dirLen, maxLen);
+  let projected = {
+    x: fromState.x + (dir.x / dirLen) * clampedLen,
+    y: fromState.y + (dir.y / dirLen) * clampedLen,
   };
+  const toTarget = { x: projected.x - targetState.x, y: projected.y - targetState.y };
+  const toTargetLen = Math.sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y) || 1;
+  if (toTargetLen < targetState.radius) {
+    const scale = targetState.radius / toTargetLen;
+    projected = {
+      x: targetState.x + toTarget.x * scale,
+      y: targetState.y + toTarget.y * scale,
+    };
+  }
+  return { ...projected, radius: targetState.radius };
 }
 
 function selfLoopPath(node, tr) {
