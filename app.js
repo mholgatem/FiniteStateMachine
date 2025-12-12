@@ -2430,33 +2430,11 @@ async function captureTransitionDrawerImage() {
   if (!wasOpen) closeTransitionDrawer();
 }
 
-function buildKmapExportLine(kmap) {
-  const symbol = kmap.type === 'pos' ? 'Π' : 'Σ';
-  const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
-  const displayExpr = tokensToDisplay(tokens) || tokensToCanonical(tokens) || kmap.expression || '';
-  const label = formatScriptedText(kmap.label || 'K-map');
-  const vars = formatVariableList(kmap.variables || []);
-  const exprHtml = formatScriptedText(displayExpr || '0');
-  return `${label} (${vars}) ${symbol} = ${exprHtml}`;
-}
-
 function buildKmapExportClone(card, kmap) {
   const clone = card.cloneNode(true);
   clone.style.width = `${card.scrollWidth}px`;
   clone.style.maxWidth = `${card.scrollWidth}px`;
-  const exprRow = clone.querySelector('.kmap-expression');
-  if (exprRow) exprRow.style.display = 'none';
-
-  const exportExpr = document.createElement('div');
-  exportExpr.className = 'kmap-export-expression';
-  exportExpr.innerHTML = buildKmapExportLine(kmap);
-
-  const meta = clone.querySelector('.kmap-meta');
-  if (meta && meta.parentNode) {
-    meta.insertAdjacentElement('afterend', exportExpr);
-  } else {
-    clone.insertBefore(exportExpr, clone.firstChild);
-  }
+  clone.classList.add('kmap-exporting');
 
   const wrapper = document.createElement('div');
   wrapper.style.position = 'fixed';

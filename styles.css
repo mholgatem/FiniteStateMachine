@@ -886,6 +886,23 @@ svg text {
   color: #fff;
 }
 
+.kmap-card.exporting .kmap-expr-token {
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  background: var(--surface);
+  cursor: grab;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.kmap-card.exporting .kmap-expr-token.operator {
+  background: transparent;
+  color: #000000;
+}
+
 .transition-column-token {
   background: cornflowerblue;
   color: #fff;
