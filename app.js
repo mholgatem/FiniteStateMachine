@@ -539,9 +539,6 @@ function ensureTransitionTableStructure() {
       };
     })
     .filter(Boolean);
-  if (!state.transitionTable.columns.length) {
-    state.transitionTable.columns = buildDefaultTransitionColumns(templates);
-  }
 
   const columns = [{ key: 'row_index', label: '#', type: 'rowIndex' }, ...state.transitionTable.columns];
 
