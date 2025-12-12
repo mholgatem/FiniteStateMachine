@@ -978,8 +978,8 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
 
   state.transitionTable.rows.forEach((row) => {
     if (!matches) return;
-    const stateUsed = stateIsUsed(row.stateId);
-    if (!stateUsed && transitionTableRowIsBlank(row)) return;
+    const rowIsBlank = transitionTableRowIsBlank(row);
+    if (rowIsBlank) return;
     const actualRaw = readTransitionTableRowValues(
       row,
       currentStateCols,
