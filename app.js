@@ -903,6 +903,21 @@ function arraysCompatible(expectedArr, actualArr) {
   return expectedArr.every((val, idx) => valuesCompatible(val, actualArr[idx]));
 }
 
+function outputsCompatible(expectedOutputs, actualOutputs) {
+  if (state.type === 'mealy') {
+    if (expectedOutputs.length !== actualOutputs.length) return false;
+    return expectedOutputs.every((val, idx) => {
+      const expected = normalizeBinaryValue(val);
+      const actual = normalizeBinaryValue(actualOutputs[idx]);
+      if (!expected || !actual) return false;
+      if (expected === 'X') return actual === 'X';
+      if (actual === 'X') return true;
+      return expected === actual;
+    });
+  }
+  return arraysCompatible(expectedOutputs, actualOutputs);
+}
+
 function stateIsUsed(stateId) {
   const st = state.states.find((s) => s.id === stateId);
   if (!st) return false;
@@ -937,6 +952,7 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
   const { silent = false, recordStatus = true } = options;
   ensureTransitionTableStructure();
   const { expectations, conflict } = buildDiagramExpectations();
+  const uncheckedExpectations = new Set(expectations.keys());
 
   const currentStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('q_'));
   const inputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('in_'));
@@ -990,7 +1006,8 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
     }
     const matchingState = findStateByBits(currentStateBits);
     if (matchingState && !stateIsUsed(matchingState.id)) return;
-    const expected = expectations.get(`${currentStateBits}|${inputBits || 'none'}`);
+    const key = `${currentStateBits}|${inputBits || 'none'}`;
+    const expected = expectations.get(key);
     if (!expected) {
       matches = false;
       return;
@@ -999,16 +1016,25 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
       matches = false;
       return;
     }
-    if (!arraysCompatible(expected.outputs, actual.outputs)) {
+    if (!outputsCompatible(expected.outputs, actual.outputs)) {
       matches = false;
+      return;
     }
+    uncheckedExpectations.delete(key);
   });
+
+  if (matches && uncheckedExpectations.size > 0) {
+    matches = false;
+  }
 
   if (matches) {
     setVerificationStatus(true);
     if (recordStatus) unsavedChanges = true;
   } else {
-    setVerificationStatus(false);
+    const reason = uncheckedExpectations.size
+      ? 'Transition table is missing transitions that exist in the diagram'
+      : undefined;
+    setVerificationStatus(false, reason);
     if (recordStatus) unsavedChanges = true;
   }
 }
