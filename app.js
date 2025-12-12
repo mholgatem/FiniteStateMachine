@@ -125,7 +125,7 @@ function clearVerificationStatus() {
   }
 }
 
-function setVerificationStatus(passed) {
+function setVerificationStatus(passed, message) {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
   const baseLabel = verifyBtn.dataset.baseLabel || verifyBtn.textContent || 'Verify Transition Table';
@@ -148,7 +148,7 @@ function setVerificationStatus(passed) {
   if (passed === false) {
     verifyBtn.classList.add('failed');
     verifyBtn.textContent = "Table & diagram don't match";
-    verifyBtn.title = 'Your transition table DOES NOT match your transition diagram';
+    verifyBtn.title = message || 'Your transition table DOES NOT match your transition diagram';
     state.transitionTableVerified = false;
     verifyButtonResetTimer = setTimeout(() => {
       verifyBtn.classList.remove('failed');
@@ -912,6 +912,19 @@ function stateIsUsed(stateId) {
   return st.placed || participatesInTransition;
 }
 
+function clickTargetsSelection(target) {
+  if (!target) return false;
+  if (selectedArrowId) {
+    const arrowHit = target.closest('#diagram .arrow-path, #diagram .arc-handle, #diagram .label-handle');
+    if (arrowHit && parseInt(arrowHit.dataset.id, 10) === selectedArrowId) return true;
+  }
+  if (selectedStateId !== null) {
+    const stateHit = target.closest('#diagram g.state-group');
+    if (stateHit && parseInt(stateHit.dataset.id, 10) === selectedStateId) return true;
+  }
+  return false;
+}
+
 function transitionTableRowIsBlank(row) {
   const cells = state.transitionTable?.cells || {};
   return transitionTableValueColumns.every((col) => {
@@ -929,13 +942,29 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
   const inputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('in_'));
   const nextStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('next_q_'));
   const outputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('out_'));
-  const bitCount = currentStateCols.length;
+
+  const bitCount = stateBitCount();
+
+  const missingHeaders = [];
+  if (currentStateCols.length !== bitCount) missingHeaders.push('current state bits');
+  if (nextStateCols.length !== bitCount) missingHeaders.push('next state bits');
+  if (inputCols.length !== state.inputs.length) missingHeaders.push('input columns');
+  if (outputCols.length !== state.outputs.length) missingHeaders.push('output columns');
+
+  if (missingHeaders.length) {
+    const reason = `Missing required column headers: ${missingHeaders.join(', ')}`;
+    if (!silent) window.alert(reason);
+    setVerificationStatus(false, reason);
+    if (recordStatus) unsavedChanges = true;
+    return;
+  }
 
   let matches = !conflict;
 
   state.transitionTable.rows.forEach((row) => {
     if (!matches) return;
-    if (transitionTableRowIsBlank(row)) return;
+    const stateUsed = stateIsUsed(row.stateId);
+    if (!stateUsed && transitionTableRowIsBlank(row)) return;
     const actualRaw = readTransitionTableRowValues(
       row,
       currentStateCols,
@@ -3372,6 +3401,11 @@ function attachEvents() {
     }
     if (e.target.classList.contains('dialog-backdrop')) {
       e.target.classList.add('hidden');
+    }
+    if ((selectedArrowId || selectedStateId !== null) && !clickTargetsSelection(e.target)) {
+      selectedArrowId = null;
+      selectedStateId = null;
+      renderDiagram();
     }
   });
 
