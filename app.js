@@ -8,6 +8,8 @@ const state = {
   transitions: [],
   showBinary: true,
   transitionTable: { cells: {} },
+  transitionTableVerified: false,
+  kmaps: [],
 };
 
 let currentArrow = null;
@@ -23,6 +25,7 @@ let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
+let verifyButtonResetTimer = null;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -43,10 +46,29 @@ const outputChoices = document.getElementById('outputChoices');
 const transitionDrawer = document.getElementById('transitionDrawer');
 const transitionTableHead = document.getElementById('transitionTableHead');
 const transitionTableBody = document.getElementById('transitionTableBody');
+const transitionColumnTray = document.getElementById('transitionColumnTray');
+const transitionColumnDropzone = document.getElementById('transitionColumnDropzone');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
 const toolbarNewMachine = document.getElementById('toolbarNewMachine');
+const kmapWindow = document.getElementById('kmapWindow');
+const kmapWindowHeader = document.getElementById('kmapWindowHeader');
+const kmapList = document.getElementById('kmapList');
+const kmapEmptyState = document.getElementById('kmapEmptyState');
+const confirmKmapCreate = document.getElementById('confirmKmapCreate');
+const kmapLabelInput = document.getElementById('kmapLabel');
+const kmapVariablesInput = document.getElementById('kmapVariables');
+const kmapTypeInput = document.getElementById('kmapType');
+const kmapDirectionInput = document.getElementById('kmapDirection');
+const kmapResizeHandle = document.getElementById('kmapResizeHandle');
+const transitionColumnBuilder = document.getElementById('transitionColumnBuilder');
+const toggleTransitionBuilderBtn = document.getElementById('toggleTransitionBuilder');
+
+let kmapWindowState = { width: 840, height: 540, left: null, top: null };
+let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
+let kmapExpressionDragState = null;
+let transitionColumnDragState = null;
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 
 function coerceAllowedStateCount(value) {
@@ -78,9 +100,64 @@ function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
+function columnBaseKey(col) {
+  if (!col) return '';
+  if (col.baseKey) return col.baseKey;
+  const key = col.key || '';
+  const [base] = key.split('__');
+  return base || key;
+}
+
+function uniqueId(prefix = 'id') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
 function clearVerificationStatus() {
   const verifyBtn = document.getElementById('verifyTransitionTable');
-  if (verifyBtn) verifyBtn.classList.remove('verified');
+  if (verifyBtn) {
+    if (verifyButtonResetTimer) {
+      clearTimeout(verifyButtonResetTimer);
+      verifyButtonResetTimer = null;
+    }
+    verifyBtn.classList.remove('verified', 'failed');
+    verifyBtn.removeAttribute('title');
+    if (verifyBtn.dataset.baseLabel) verifyBtn.textContent = verifyBtn.dataset.baseLabel;
+  }
+}
+
+function setVerificationStatus(passed) {
+  const verifyBtn = document.getElementById('verifyTransitionTable');
+  if (!verifyBtn) return;
+  const baseLabel = verifyBtn.dataset.baseLabel || verifyBtn.textContent || 'Verify Transition Table';
+  verifyBtn.dataset.baseLabel = baseLabel;
+  verifyBtn.textContent = baseLabel;
+  verifyBtn.classList.remove('verified', 'failed');
+  verifyBtn.removeAttribute('title');
+  if (verifyButtonResetTimer) {
+    clearTimeout(verifyButtonResetTimer);
+    verifyButtonResetTimer = null;
+  }
+
+  if (passed === true) {
+    verifyBtn.classList.add('verified');
+    verifyBtn.textContent = 'Transition table verified';
+    verifyBtn.title = 'Your transition table matches your transition diagram';
+    state.transitionTableVerified = true;
+    return;
+  }
+  if (passed === false) {
+    verifyBtn.classList.add('failed');
+    verifyBtn.textContent = "Table & diagram don't match";
+    verifyBtn.title = 'Your transition table DOES NOT match your transition diagram';
+    state.transitionTableVerified = false;
+    verifyButtonResetTimer = setTimeout(() => {
+      verifyBtn.classList.remove('failed');
+      verifyBtn.textContent = baseLabel;
+      verifyBtn.removeAttribute('title');
+    }, 2000);
+    return;
+  }
+  state.transitionTableVerified = false;
 }
 
 function diagramHasHighlightedStates() {
@@ -96,12 +173,12 @@ function updateVerifyButtonState() {
   if (!verifyBtn) return;
   const hasErrors = diagramHasHighlightedStates();
   verifyBtn.disabled = hasErrors;
-  if (hasErrors) verifyBtn.classList.remove('verified');
+  if (hasErrors) setVerificationStatus(null);
 }
 
 function markDirty() {
   unsavedChanges = true;
-  clearVerificationStatus();
+  setVerificationStatus(null);
   updateVerifyButtonState();
 }
 
@@ -133,6 +210,11 @@ function normalizeNames(list) {
 
 function parseList(value) {
   return normalizeNames(value.split(','));
+}
+
+function parseKmapVariables(value) {
+  const vars = parseList(value || '');
+  return vars.slice(0, 6);
 }
 
 function defaultSelections(count, fallbackText = '') {
@@ -290,6 +372,7 @@ function initStates() {
   }));
   state.transitions = [];
   state.transitionTable = { cells: {} };
+  state.transitionTableVerified = false;
   undoStack = [];
   selectedArrowId = null;
   selectedStateId = null;
@@ -361,45 +444,106 @@ function generateInputCombos(count) {
   return combos;
 }
 
+function buildTransitionColumnTemplates() {
+  const bitCount = stateBitCount();
+  const templates = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    templates.push({ key: `q_${i}`, baseKey: `q_${i}`, label: `Q_${i}`, type: 'value' });
+  }
+  const nextStateTemplates = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    nextStateTemplates.push({
+      key: `next_q_${i}`,
+      baseKey: `next_q_${i}`,
+      label: `Q_${i}^+`,
+      type: 'value',
+    });
+  }
+  const inputTemplates = state.inputs.map((name, idx) => ({
+    key: `in_${idx}`,
+    baseKey: `in_${idx}`,
+    label: name || `Input ${idx + 1}`,
+    type: 'value',
+  }));
+  const outputTemplates = state.outputs.map((name, idx) => ({
+    key: `out_${idx}`,
+    baseKey: `out_${idx}`,
+    label: name || `Output ${idx + 1}`,
+    type: 'value',
+  }));
+  templates.push(...nextStateTemplates, ...inputTemplates, ...outputTemplates);
+  templates.push({ key: 'spacer', baseKey: 'spacer', label: '', type: 'spacer', allowMultiple: true });
+  return templates;
+}
+
+function createSpacerColumn() {
+  return {
+    key: `spacer_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    baseKey: 'spacer',
+    label: '',
+    type: 'spacer',
+  };
+}
+
+function createColumnInstance(template) {
+  const baseKey = columnBaseKey(template);
+  const key = `${baseKey}__${uniqueId('col')}`;
+  return { ...template, key, baseKey };
+}
+
+function buildDefaultTransitionColumns(templates) {
+  const find = (predicate) => templates.filter(predicate);
+  const columns = [];
+  const currentStates = find((t) => t.key.startsWith('q_'));
+  const nextStates = find((t) => t.key.startsWith('next_q_'));
+  const inputs = find((t) => t.key.startsWith('in_'));
+  const outputs = find((t) => t.key.startsWith('out_'));
+
+  const addSpacer = () => columns.push(createSpacerColumn());
+  addSpacer();
+  currentStates.forEach((t) => columns.push(createColumnInstance(t)));
+  addSpacer();
+  nextStates.forEach((t) => columns.push(createColumnInstance(t)));
+  if (inputs.length) addSpacer();
+  inputs.forEach((t) => columns.push(createColumnInstance(t)));
+  if (outputs.length) addSpacer();
+  outputs.forEach((t) => columns.push(createColumnInstance(t)));
+  return columns;
+}
+
 function ensureTransitionTableStructure() {
   if (!state.transitionTable || typeof state.transitionTable !== 'object') {
     state.transitionTable = { cells: {} };
   }
   if (!state.transitionTable.cells) state.transitionTable.cells = {};
 
-  const bitCount = stateBitCount();
-  const stateBitCols = [];
-  for (let i = bitCount - 1; i >= 0; i -= 1) {
-    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}`, type: 'value' });
+  if (!Array.isArray(state.transitionTable.columns)) state.transitionTable.columns = [];
+
+  const templates = buildTransitionColumnTemplates();
+  state.transitionTable.availableColumns = templates;
+  const templateMap = new Map(templates.map((tpl) => [tpl.key, tpl]));
+  state.transitionTable.columns = state.transitionTable.columns
+    .map((col) => {
+      if (col.type === 'spacer') return col;
+      const baseKey = columnBaseKey(col);
+      const template = templateMap.get(baseKey);
+      if (!template) return null;
+      const key = (col.key && col.key.startsWith(baseKey)) ? col.key : `${baseKey}__${uniqueId('col')}`;
+      return {
+        ...template,
+        ...col,
+        baseKey,
+        key,
+        label: col.label || template.label,
+        type: template.type,
+      };
+    })
+    .filter(Boolean);
+  if (!state.transitionTable.columns.length) {
+    state.transitionTable.columns = buildDefaultTransitionColumns(templates);
   }
 
-  const nextStateBitCols = [];
-  for (let i = bitCount - 1; i >= 0; i -= 1) {
-    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q_${i}^+`, type: 'value' });
-  }
-
-  const inputCols = state.inputs.map((name, idx) => ({
-    key: `in_${idx}`,
-    label: name || `Input ${idx + 1}`,
-    type: 'value',
-  }));
-  const outputCols = state.outputs.map((name, idx) => ({
-    key: `out_${idx}`,
-    label: name || `Output ${idx + 1}`,
-    type: 'value',
-  }));
-
-  const columns = [
-    { key: 'row_index', label: '#', type: 'rowIndex' },
-    { key: 'spacer_0', label: '', type: 'spacer' },
-    ...stateBitCols,
-    { key: 'spacer_state_inputs', label: '', type: 'spacer' },
-    ...inputCols,
-    { key: 'spacer_1', label: '', type: 'spacer' },
-    ...nextStateBitCols,
-    { key: 'spacer_2', label: '', type: 'spacer' },
-    ...outputCols,
-  ];
+  const columns = [{ key: 'row_index', label: '#', type: 'rowIndex' }, ...state.transitionTable.columns];
 
   transitionTableValueColumns = columns.filter((col) => col.type === 'value');
 
@@ -424,7 +568,6 @@ function ensureTransitionTableStructure() {
     if (state.transitionTable.cells[key] === undefined) state.transitionTable.cells[key] = '';
   });
 
-  state.transitionTable.columns = columns;
   state.transitionTable.rows = rows;
   state.transitionTable.valueColumns = transitionTableValueColumns;
   state.transitionTable.groupSize = transitionTableGroupSize;
@@ -440,18 +583,74 @@ function confirmTransitionTableReset(kind) {
   return window.confirm(`Changing the number of ${kind} will reset your transition table, proceed?`);
 }
 
+function renderTransitionColumnTray() {
+  if (!transitionColumnTray) return;
+  transitionColumnTray.innerHTML = '';
+  const templates = state.transitionTable?.availableColumns || buildTransitionColumnTemplates();
+  templates.forEach((tpl) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'kmap-token transition-token';
+    btn.draggable = true;
+    btn.dataset.tokenType = tpl.type;
+    btn.dataset.tokenValue = tpl.key;
+    if (tpl.type === 'spacer') btn.classList.add('transition-spacer');
+    btn.innerHTML = tpl.label ? formatScriptedText(tpl.label) : '&nbsp;';
+    transitionColumnTray.appendChild(btn);
+  });
+}
+
+function renderTransitionColumnToken(col, index) {
+  const el = document.createElement('div');
+  el.className = 'kmap-expr-token transition-column-token';
+  el.draggable = true;
+  el.dataset.tokenType = col.type;
+  el.dataset.tokenValue = col.key;
+  el.dataset.index = index;
+  const inner = document.createElement('span');
+  inner.className = 'kmap-expr-token-inner';
+  if (col.type === 'spacer') {
+    el.classList.add('transition-spacer-token');
+    inner.innerHTML = '&nbsp;';
+  } else {
+    inner.innerHTML = formatScriptedText(col.label || '');
+  }
+  el.appendChild(inner);
+  return el;
+}
+
+function renderTransitionColumnSelection() {
+  if (!transitionColumnDropzone) return;
+  transitionColumnDropzone.innerHTML = '';
+  const columns = state.transitionTable?.columns || [];
+  if (!columns.length) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'kmap-expr-placeholder';
+    placeholder.textContent = 'Drag columns here to build the table';
+    transitionColumnDropzone.appendChild(placeholder);
+    return;
+  }
+  columns.forEach((col, idx) => {
+    transitionColumnDropzone.appendChild(renderTransitionColumnToken(col, idx));
+  });
+}
+
 function renderTransitionTable() {
   ensureTransitionTableStructure();
+  renderTransitionColumnTray();
+  renderTransitionColumnSelection();
   transitionTableHead.innerHTML = '';
   transitionTableBody.innerHTML = '';
+
+  const columns = [{ key: 'row_index', label: '#', type: 'rowIndex' }, ...(state.transitionTable.columns || [])];
 
   const headerRow = document.createElement('tr');
   const valueIndexMap = new Map(
     transitionTableValueColumns.map((col, idx) => [col.key, idx]),
   );
-  state.transitionTable.columns.forEach((col) => {
+  columns.forEach((col) => {
     const th = document.createElement('th');
-    th.innerHTML = formatScriptedText(col.label);
+    th.innerHTML = formatScriptedText(col.label || '');
     if (col.type === 'spacer') th.classList.add('col-spacer');
     if (col.type === 'rowIndex') th.classList.add('row-index-cell');
     headerRow.appendChild(th);
@@ -462,7 +661,7 @@ function renderTransitionTable() {
     const tr = document.createElement('tr');
     tr.dataset.rowIndex = rowIdx;
 
-    state.transitionTable.columns.forEach((col) => {
+    columns.forEach((col) => {
       const td = document.createElement('td');
       if (col.type === 'spacer') {
         td.classList.add('col-spacer');
@@ -486,21 +685,21 @@ function renderTransitionTable() {
       tr.appendChild(td);
     });
 
-    transitionTableBody.appendChild(tr);
+      transitionTableBody.appendChild(tr);
 
-    if (
-      transitionTableGroupSize > 0 &&
-      (rowIdx + 1) % transitionTableGroupSize === 0 &&
-      rowIdx < state.transitionTable.rows.length - 1
-    ) {
-      const spacerRow = document.createElement('tr');
-      spacerRow.classList.add('row-spacer');
-      const spacerCell = document.createElement('td');
-      spacerCell.colSpan = state.transitionTable.columns.length;
-      spacerRow.appendChild(spacerCell);
-      transitionTableBody.appendChild(spacerRow);
-    }
-  });
+      if (
+        transitionTableGroupSize > 0 &&
+        (rowIdx + 1) % transitionTableGroupSize === 0 &&
+        rowIdx < state.transitionTable.rows.length - 1
+      ) {
+        const spacerRow = document.createElement('tr');
+        spacerRow.classList.add('row-spacer');
+        const spacerCell = document.createElement('td');
+        spacerCell.colSpan = columns.length;
+        spacerRow.appendChild(spacerCell);
+        transitionTableBody.appendChild(spacerRow);
+      }
+    });
 
   updateVerifyButtonState();
 }
@@ -726,14 +925,15 @@ function transitionTableRowIsBlank(row) {
   });
 }
 
-function verifyTransitionTableAgainstDiagram() {
+function verifyTransitionTableAgainstDiagram(options = {}) {
+  const { silent = false, recordStatus = true } = options;
   ensureTransitionTableStructure();
   const { expectations, conflict } = buildDiagramExpectations();
 
-  const currentStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('q_'));
-  const inputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('in_'));
-  const nextStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('next_q_'));
-  const outputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('out_'));
+  const currentStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('q_'));
+  const inputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('in_'));
+  const nextStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('next_q_'));
+  const outputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('out_'));
   const bitCount = currentStateCols.length;
 
   let matches = !conflict;
@@ -769,11 +969,11 @@ function verifyTransitionTableAgainstDiagram() {
   });
 
   if (matches) {
-    const verifyBtn = document.getElementById('verifyTransitionTable');
-    if (verifyBtn) verifyBtn.classList.add('verified');
+    setVerificationStatus(true);
+    if (recordStatus) unsavedChanges = true;
   } else {
-    window.alert('Your state transition table does not match your state transition diagram');
-    clearVerificationStatus();
+    setVerificationStatus(false);
+    if (recordStatus) unsavedChanges = true;
   }
 }
 
@@ -982,6 +1182,16 @@ function loadState(data) {
   state.outputs = normalizeNames(state.outputs || []);
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
+  state.transitionTableVerified = !!data.transitionTableVerified;
+  state.kmaps = Array.isArray(data.kmaps)
+    ? data.kmaps.map((k) => ({
+        ...k,
+        id: k.id || Date.now() + Math.random(),
+        variables: normalizeNames(k.variables || []),
+        cells: k.cells || {},
+        expression: k.expression || '',
+      }))
+    : [];
   undoStack = [];
   selectedArrowId = null;
   selectedStateId = null;
@@ -994,8 +1204,951 @@ function loadState(data) {
   renderPalette();
   renderTransitionTable();
   renderDiagram();
-  clearVerificationStatus();
+  renderKmaps();
+  verifyTransitionTableAgainstDiagram({ silent: true, recordStatus: false });
   clearDirty();
+}
+
+function grayCode(bits) {
+  if (bits <= 0) return [''];
+  let codes = ['0', '1'];
+  for (let i = 1; i < bits; i += 1) {
+    const reflected = [...codes].reverse();
+    codes = codes.map((c) => `0${c}`).concat(reflected.map((c) => `1${c}`));
+  }
+  return codes;
+}
+
+function formatVariableList(vars) {
+  return vars.map((v) => formatScriptedText(v)).join(', ') || '—';
+}
+
+const expressionAutocompleteState = new WeakMap();
+const expressionEditorState = new WeakMap();
+
+function stripOverlines(text) {
+  return (text || '').replace(/\u0305/g, '');
+}
+
+function applyOverline(text) {
+  return (text || '')
+    .split('')
+    .map((ch) => (ch.trim() ? `${ch}\u0305` : ch))
+    .join('');
+}
+
+function tokenizeExpressionInput(raw) {
+  const tokens = [];
+  const src = stripOverlines(raw);
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (/\s/.test(ch)) {
+      i += 1;
+      continue;
+    }
+    if (ch === '+') {
+      tokens.push({ type: 'op', value: '+' });
+      i += 1;
+      continue;
+    }
+    if (ch === '*') {
+      tokens.push({ type: 'op', value: '*' });
+      i += 1;
+      continue;
+    }
+    if (ch === '~') {
+      tokens.push({ type: 'not' });
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      tokens.push({ type: 'not-post' });
+      i += 1;
+      continue;
+    }
+    if (ch === '(' || ch === ')') {
+      tokens.push({ type: 'paren', value: ch });
+      i += 1;
+      continue;
+    }
+    if (/[A-Za-z0-9_^]/.test(ch)) {
+      let start = i;
+      while (i < src.length && /[A-Za-z0-9_^]/.test(src[i])) i += 1;
+      tokens.push({ type: 'var', value: src.slice(start, i) });
+      continue;
+    }
+    i += 1;
+  }
+  return tokens;
+}
+
+function normalizeExpressionTokens(raw) {
+  const tokens = tokenizeExpressionInput(raw);
+  const normalized = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tk = tokens[i];
+    if (tk.type === 'var') {
+      let negated = false;
+      if (i > 0 && tokens[i - 1].type === 'not') {
+        negated = true;
+      }
+      if (i + 1 < tokens.length && tokens[i + 1].type === 'not-post') {
+        negated = true;
+        i += 1;
+      }
+      normalized.push({ type: 'var', value: tk.value, negated });
+      continue;
+    }
+    if (tk.type === 'not') {
+      const next = tokens[i + 1];
+      if (!next || next.type !== 'var') {
+        normalized.push({ type: 'not' });
+      }
+      continue;
+    }
+    if (tk.type === 'op' || tk.type === 'paren') {
+      normalized.push(tk);
+    }
+  }
+  return normalized;
+}
+
+function tokensToCanonical(tokens) {
+  const parts = [];
+  let prevType = null;
+  tokens.forEach((tk, idx) => {
+    if (tk.type === 'var') {
+      const name = tk.value;
+      const base = tk.negated ? `~${name}` : name;
+      if (prevType === 'var' || prevType === 'close') {
+        parts.push(' ');
+      }
+      parts.push(base);
+      prevType = 'var';
+      return;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '+') {
+        parts.push(' + ');
+      } else if (tk.value === '*') {
+        parts.push(' ');
+      }
+      prevType = 'op';
+      return;
+    }
+    if (tk.type === 'not') {
+      parts.push('~');
+      prevType = 'not';
+      return;
+    }
+    if (tk.type === 'paren') {
+      if (tk.value === '(' && (prevType === 'var' || prevType === 'close')) {
+        parts.push(' ');
+      }
+      parts.push(tk.value);
+      prevType = tk.value === '(' ? 'open' : 'close';
+    }
+    if (idx === tokens.length - 1) prevType = tk.type;
+  });
+  return parts.join('').replace(/\s+/g, ' ').trim();
+}
+
+function expressionStringToTokens(raw) {
+  const normalized = normalizeExpressionTokens(raw || '');
+  return normalized
+    .filter((tk) => tk.type === 'var' || tk.type === 'op' || tk.type === 'paren')
+    .map((tk) => ({
+      type: tk.type,
+      value: tk.value,
+      negated: tk.negated || false,
+    }));
+}
+
+function buildTrayToken(token) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'kmap-token';
+  btn.draggable = true;
+  btn.dataset.tokenType = token.type;
+  btn.dataset.tokenValue = token.value;
+  if (token.type === 'op' || token.type === 'paren') {
+    btn.classList.add('kmap-token-operator');
+  }
+  btn.innerHTML = formatScriptedText(token.value || '');
+  return btn;
+}
+
+function renderExpressionToken(token, index, kmapId) {
+  const el = document.createElement('div');
+  el.className = 'kmap-expr-token';
+  el.draggable = true;
+  el.dataset.tokenType = token.type;
+  el.dataset.tokenValue = token.value;
+  el.dataset.index = index;
+  el.dataset.kmapId = kmapId;
+  const inner = document.createElement('span');
+  inner.className = 'kmap-expr-token-inner';
+  if (token.type === 'op' || token.type === 'paren') {
+    el.classList.add('operator');
+  }
+  if (token.type === 'var') {
+    inner.classList.toggle('negated', !!token.negated);
+  }
+  inner.innerHTML = formatScriptedText(token.value || '');
+  el.appendChild(inner);
+  return el;
+}
+
+function renderExpressionTray(tray, tokens, kmapId) {
+  tray.innerHTML = '';
+  if (!tokens.length) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'kmap-expr-placeholder';
+    placeholder.textContent = 'Drag items here to build your expression';
+    tray.appendChild(placeholder);
+    return;
+  }
+  tokens.forEach((tk, idx) => {
+    tray.appendChild(renderExpressionToken(tk, idx, kmapId));
+  });
+}
+
+function ensureDropMarker(tray) {
+  let marker = tray.querySelector('.kmap-drop-marker');
+  if (!marker) {
+    marker = document.createElement('div');
+    marker.className = 'kmap-drop-marker';
+  }
+  return marker;
+}
+
+function clearDropMarker(tray) {
+  const marker = tray.querySelector('.kmap-drop-marker');
+  if (marker) marker.remove();
+}
+
+function updateKmapExpressionTokens(kmap, tokens, tray) {
+  kmap.expressionTokens = tokens;
+  kmap.expression = tokensToCanonical(tokens) || '';
+  if (tray) renderExpressionTray(tray, tokens, kmap.id);
+}
+
+function getKmapById(id) {
+  return state.kmaps.find((m) => m.id.toString() === id.toString());
+}
+
+function tokensToDisplay(tokens) {
+  const parts = [];
+  let prevType = null;
+  tokens.forEach((tk) => {
+    if (tk.type === 'var') {
+      const rendered = tk.negated ? applyOverline(tk.value) : tk.value;
+      const withMarker = tk.negated ? `~${rendered}` : rendered;
+      if (prevType === 'var' || prevType === 'close') {
+        parts.push(' ');
+      }
+      parts.push(withMarker);
+      prevType = 'var';
+      return;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '+') {
+        parts.push('   +   ');
+        prevType = 'op';
+        return;
+      }
+      if (prevType && tk.value === '*') {
+        parts.push(' ');
+        prevType = 'op';
+        return;
+      }
+    }
+    if (tk.type === 'not') {
+      parts.push('~');
+      prevType = 'not';
+      return;
+    }
+    if (tk.type === 'paren') {
+      if (tk.value === '(' && (prevType === 'var' || prevType === 'close')) {
+        parts.push(' ');
+      }
+      parts.push(tk.value);
+      prevType = tk.value === '(' ? 'open' : 'close';
+    }
+  });
+  return parts.join('').trim();
+}
+
+function formatExpressionDisplay(raw, variables) {
+  const tokens = normalizeExpressionTokens(raw);
+  const canonical = tokensToCanonical(tokens);
+  const display = tokensToDisplay(tokens);
+  const result = display || canonical || '';
+  return result;
+}
+
+function normalizeVarName(name) {
+  return stripOverlines(name || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function getExpressionState(editor, kmap) {
+  let state = expressionEditorState.get(editor);
+  if (!state) {
+    state = {
+      raw: kmap?.expression || '',
+      caret: (kmap?.expression || '').length,
+      scriptMode: null,
+      selectedTerm: null,
+    };
+    expressionEditorState.set(editor, state);
+  }
+  return state;
+}
+
+function buildAutocompleteMatches(prefix, variables) {
+  const clean = normalizeVarName(prefix);
+  if (!clean) return [];
+  return (variables || []).filter((v) => normalizeVarName(v).startsWith(clean));
+}
+
+function renderExpressionTerm(name, negated, termIndex) {
+  const scripted = formatScriptedText(name || '');
+  const base = escapeHtml((name || '').split(/[_^]/)[0] || '');
+  const decoration = negated ? 'text-decoration: overline;' : '';
+  const baseSpan = `<span class="expr-term-base" style="${decoration}">${base || '&nbsp;'}</span>`;
+  return `<span class="expr-term" data-term-index="${termIndex}">${baseSpan}${scripted.replace(
+    base,
+    '',
+  )}</span>`;
+}
+
+function renderExpressionHtml(raw) {
+  const tokens = normalizeExpressionTokens(raw || '');
+  const parts = [];
+  let termIndex = 0;
+  let prevType = null;
+  tokens.forEach((tk) => {
+    if (tk.type === 'var') {
+      if (prevType === 'var' || prevType === 'close') {
+        parts.push('<span class="expr-gap and-gap"></span>');
+      }
+      parts.push(renderExpressionTerm(tk.value, tk.negated, termIndex));
+      termIndex += 1;
+      prevType = 'var';
+      return;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '+') {
+        parts.push('<span class="expr-gap or-gap"></span>');
+        prevType = 'op';
+      } else if (tk.value === '*') {
+        parts.push('<span class="expr-gap and-gap"></span>');
+        prevType = 'op';
+      }
+      return;
+    }
+    if (tk.type === 'paren') {
+      const cls = tk.value === '(' ? 'expr-paren open' : 'expr-paren close';
+      if (tk.value === '(' && (prevType === 'var' || prevType === 'close')) {
+        parts.push('<span class="expr-gap and-gap"></span>');
+      }
+      parts.push(`<span class="${cls}">${escapeHtml(tk.value)}</span>`);
+      prevType = tk.value === '(' ? 'open' : 'close';
+    }
+  });
+  return parts.join('') || '&nbsp;';
+}
+
+function syncExpressionInput(target, kmap, providedState = null) {
+  const state = providedState || getExpressionState(target, kmap);
+  const html = renderExpressionHtml(state.raw);
+  target.innerHTML = html;
+  if (state.selectionMode === 'select' && state.selectedTerm !== null) {
+    const termEl = target.querySelector(`[data-term-index="${state.selectedTerm}"]`);
+    if (termEl) termEl.classList.add('selected');
+  }
+  const tokens = normalizeExpressionTokens(state.raw);
+  const canonical = tokensToCanonical(tokens);
+  if (kmap) kmap.expression = canonical || state.raw.trim();
+}
+
+function insertIntoExpression(state, insertText) {
+  const left = state.raw.slice(0, state.caret);
+  const right = state.raw.slice(state.caret);
+  state.raw = `${left}${insertText}${right}`;
+  state.caret += insertText.length;
+}
+
+function removeFromExpression(state, count) {
+  if (state.caret === 0 || count <= 0) return;
+  const left = state.raw.slice(0, Math.max(0, state.caret - count));
+  const right = state.raw.slice(state.caret);
+  state.raw = `${left}${right}`;
+  state.caret = Math.max(0, state.caret - count);
+}
+
+function handleAutocomplete(state, variables) {
+  const prefix = state.raw.slice(0, state.caret).match(/[A-Za-z0-9_^~']+$/)?.[0] || '';
+  if (!prefix || state.caret !== state.raw.length) {
+    expressionAutocompleteState.set(state, { matches: [], index: 0, start: 0, prefix: '' });
+    return null;
+  }
+  const matches = buildAutocompleteMatches(prefix.replace(/^~/, ''), variables);
+  if (!matches.length) return null;
+  const entry = { matches, index: 0, start: state.caret - prefix.length, prefix };
+  expressionAutocompleteState.set(state, entry);
+  return entry;
+}
+
+function cycleAutocompleteState(editorState, direction) {
+  const entry = expressionAutocompleteState.get(editorState);
+  if (!entry || !(entry.matches || []).length) return null;
+  const len = entry.matches.length;
+  entry.index = (len + entry.index + direction) % len;
+  expressionAutocompleteState.set(editorState, entry);
+  return entry;
+}
+
+function applyAutocomplete(editorState) {
+  const entry = expressionAutocompleteState.get(editorState);
+  if (!entry || !(entry.matches || []).length) return false;
+  const suggestion = entry.matches[entry.index];
+  editorState.raw =
+    editorState.raw.slice(0, entry.start) + suggestion + editorState.raw.slice(editorState.caret);
+  editorState.caret = entry.start + suggestion.length;
+  return true;
+}
+
+function updateTermSelection(state, direction) {
+  const terms = normalizeExpressionTokens(state.raw || '').filter((tk) => tk.type === 'var');
+  if (!terms.length) {
+    state.selectedTerm = null;
+    state.selectionMode = null;
+    return;
+  }
+  if (state.selectedTerm === null) {
+    state.selectedTerm = direction < 0 ? terms.length - 1 : 0;
+    state.selectionMode = 'select';
+    return;
+  }
+  if (state.selectionMode === 'select') {
+    state.selectionMode = 'cursor';
+    return;
+  }
+  const next = state.selectedTerm + direction;
+  if (next < 0 || next >= terms.length) {
+    state.selectedTerm = null;
+    state.selectionMode = null;
+    return;
+  }
+  state.selectedTerm = next;
+  state.selectionMode = 'select';
+}
+
+function buildImplicitAndTokens(tokens) {
+  const result = [];
+  tokens.forEach((tk, idx) => {
+    result.push(tk);
+    const next = tokens[idx + 1];
+    if (!next) return;
+    const isLeft = tk.type === 'var' || (tk.type === 'paren' && tk.value === ')');
+    const isRight =
+      next.type === 'var' || next.type === 'not' || (next.type === 'paren' && next.value === '(');
+    if (isLeft && isRight) {
+      result.push({ type: 'op', value: '*' });
+    }
+  });
+  return result;
+}
+
+function toRpn(tokens) {
+  const output = [];
+  const ops = [];
+  const prec = { '~': 3, '*': 2, '+': 1 };
+  const assoc = { '~': 'right', '*': 'left', '+': 'left' };
+  tokens.forEach((tk) => {
+    if (tk.type === 'var') {
+      output.push(tk);
+      return;
+    }
+    if (tk.type === 'not' || tk.type === 'not-post') {
+      const op = '~';
+      while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[op]) {
+        output.push({ type: 'op', value: ops.pop() });
+      }
+      ops.push(op);
+      return;
+    }
+    if (tk.type === 'op') {
+      const op = tk.value;
+      while (
+        ops.length &&
+        ops[ops.length - 1] !== '(' &&
+        (prec[ops[ops.length - 1]] > prec[op] ||
+          (prec[ops[ops.length - 1]] === prec[op] && assoc[op] === 'left'))
+      ) {
+        output.push({ type: 'op', value: ops.pop() });
+      }
+      ops.push(op);
+      return;
+    }
+    if (tk.type === 'paren') {
+      if (tk.value === '(') {
+        ops.push('(');
+      } else {
+        while (ops.length && ops[ops.length - 1] !== '(') {
+          output.push({ type: 'op', value: ops.pop() });
+        }
+        ops.pop();
+      }
+    }
+  });
+  while (ops.length) {
+    output.push({ type: 'op', value: ops.pop() });
+  }
+  return output;
+}
+
+function evaluateRpn(rpn, assignmentGetter) {
+  const stack = [];
+  for (let i = 0; i < rpn.length; i += 1) {
+    const tk = rpn[i];
+    if (tk.type === 'var') {
+      const value = assignmentGetter(tk.value);
+      if (value === undefined) return null;
+      stack.push(Boolean(value));
+      continue;
+    }
+    if (tk.type === 'op') {
+      if (tk.value === '~') {
+        const a = stack.pop();
+        if (a === undefined) return null;
+        stack.push(!a);
+        continue;
+      }
+      const b = stack.pop();
+      const a = stack.pop();
+      if (a === undefined || b === undefined) return null;
+      if (tk.value === '*') stack.push(a && b);
+      else if (tk.value === '+') stack.push(a || b);
+    }
+  }
+  const result = stack.pop();
+  if (result === undefined || stack.length) return null;
+  return result;
+}
+
+function buildExpressionTruthTable(expression, variables) {
+  const cleanExpr = stripOverlines(expression || '').replace(/\s+/g, ' ').trim();
+  if (!cleanExpr) return null;
+  const tokens = tokenizeExpressionInput(cleanExpr);
+  const prepared = buildImplicitAndTokens(tokens);
+  const rpn = toRpn(prepared);
+  const table = new Map();
+  const normalizedVars = (variables || []).map((v) => ({ raw: v, norm: normalizeVarName(v) }));
+
+  const total = Math.pow(2, normalizedVars.length);
+  for (let i = 0; i < total; i += 1) {
+    const assignment = {};
+    normalizedVars.forEach((v, idx) => {
+      const bit = (i >> (normalizedVars.length - idx - 1)) & 1;
+      assignment[v.raw] = bit === 1;
+      assignment[v.norm] = bit === 1;
+    });
+    const evalAssignment = (name) => assignment[name] ?? assignment[normalizeVarName(name)];
+    const value = evaluateRpn(rpn, (name) => evalAssignment(name));
+    if (value === null) return null;
+    const key = normalizedVars
+      .map((v) => (assignment[v.raw] ? '1' : '0'))
+      .join('');
+    table.set(key, value ? '1' : '0');
+  }
+  return table;
+}
+
+function buildKmapTruthTable(kmap) {
+  const layout = buildKmapLayout(kmap);
+  const variables = [...layout.mapVars, ...layout.colVars, ...layout.rowVars];
+  const table = new Map();
+  const baseRows = layout.baseRows || 1;
+  const baseCols = layout.baseCols || 1;
+
+  for (let r = 0; r < layout.totalRows; r += 1) {
+    for (let c = 0; c < layout.totalCols; c += 1) {
+      const sub = layout.submaps.find(
+        (s) => r >= s.rowOffset && r < s.rowOffset + baseRows && c >= s.colOffset && c < s.colOffset + baseCols,
+      );
+      const mapBits = sub?.mapCode || ''.padEnd(layout.mapVars.length, '0');
+      const colCode = layout.colCodes[c - (sub?.colOffset || 0)] || '';
+      const rowCode = layout.rowCodes[r - (sub?.rowOffset || 0)] || '';
+      const bits = `${mapBits}${colCode}${rowCode}`;
+      const assignment = {};
+      variables.forEach((name, idx) => {
+        assignment[name] = bits[idx] === '1';
+      });
+      const key = variables.map((v) => (assignment[v] ? '1' : '0')).join('');
+      const cellVal = (kmap.cells && kmap.cells[kmapCellKey(r, c)]) || '';
+      table.set(key, cellVal || 'X');
+    }
+  }
+
+  return { table, variables };
+}
+
+function verifyKmapExpression(kmap) {
+  if (!kmap) return { passed: false, reason: 'No k-map selected' };
+  const kmapTable = buildKmapTruthTable(kmap);
+  const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+  const canonical = tokensToCanonical(tokens);
+  kmap.expression = canonical;
+  kmap.expressionTokens = tokens;
+  const exprTable = buildExpressionTruthTable(canonical, kmapTable.variables);
+  if (!exprTable) return { passed: false, reason: 'Expression is invalid or empty' };
+  for (const [key, value] of kmapTable.table.entries()) {
+    if (value === 'X') continue;
+    const expected = value === '1';
+    const exprVal = exprTable.get(key);
+    if (exprVal === undefined) return { passed: false, reason: 'Expression incomplete' };
+    if ((exprVal === '1') !== expected) {
+      return { passed: false, reason: 'Expression output does not match K-map' };
+    }
+  }
+  return { passed: true };
+}
+
+function buildKmapLayout(kmap) {
+  const variables = kmap.variables || [];
+  const mapVarCount = Math.max(0, variables.length - 4);
+  const mapVars = variables.slice(0, mapVarCount);
+  const coreVars = variables.slice(mapVarCount);
+  const moreSigCount = Math.ceil(coreVars.length / 2);
+  let moreSig = coreVars.slice(0, moreSigCount);
+  let lessSig = coreVars.slice(moreSigCount);
+  if (lessSig.length === 0 && moreSig.length > 1) {
+    lessSig = [moreSig.pop()];
+  }
+  let rowVars;
+  let colVars;
+  if (kmap.direction === 'vertical') {
+    rowVars = moreSig;
+    colVars = lessSig;
+  } else {
+    rowVars = lessSig;
+    colVars = moreSig;
+  }
+  if (rowVars.length === 0 && colVars.length) {
+    rowVars = [colVars.shift()];
+  }
+  const rowCodes = grayCode(rowVars.length);
+  const colCodes = grayCode(colVars.length);
+  const baseRows = rowCodes.length || 1;
+  const baseCols = colCodes.length || 1;
+
+  let mapRows = 1;
+  let mapCols = 1;
+  let mapRowCodes = [''];
+  let mapColCodes = [''];
+
+  if (mapVarCount === 1) {
+    mapCols = 2;
+    mapColCodes = grayCode(1);
+  } else if (mapVarCount >= 2) {
+    mapRows = 2;
+    mapCols = 2;
+    mapRowCodes = grayCode(1);
+    mapColCodes = grayCode(1);
+  }
+
+  const submaps = [];
+  for (let mr = 0; mr < mapRows; mr += 1) {
+    for (let mc = 0; mc < mapCols; mc += 1) {
+      const mapCode = `${mapRowCodes[mr] || ''}${mapColCodes[mc] || ''}`;
+      const assignments = mapVars.map((name, idx) => `${name}=${mapCode[idx] || '0'}`);
+      submaps.push({
+        mapRow: mr,
+        mapCol: mc,
+        mapCode,
+        label: assignments.join(', '),
+        rowOffset: mr * baseRows,
+        colOffset: mc * baseCols,
+      });
+    }
+  }
+
+  return {
+    mapVarCount,
+    mapVars,
+    rowVars,
+    colVars,
+    rowCodes,
+    colCodes,
+    baseRows,
+    baseCols,
+    mapRows,
+    mapCols,
+    totalRows: baseRows * mapRows,
+    totalCols: baseCols * mapCols,
+    submaps,
+  };
+}
+
+function kmapCellKey(row, col) {
+  return `${row}-${col}`;
+}
+
+function buildKmapCornerLabel(layout) {
+  const corner = document.createElement('div');
+  corner.className = 'kmap-corner-label';
+  const diagonal = document.createElement('div');
+  diagonal.className = 'kmap-diagonal';
+  corner.appendChild(diagonal);
+
+  const buildBlock = (vars, blockClass) => {
+    const block = document.createElement('div');
+    block.className = `kmap-variable-block ${blockClass}`;
+    const list = vars.length ? vars : ['—'];
+    list.forEach((name, idx) => {
+      const span = document.createElement('span');
+      const positionClass = idx === 0 ? 'kmap-var-top' : idx === 1 ? 'kmap-var-bottom' : '';
+      span.className = `kmap-var ${positionClass}`.trim();
+      span.innerHTML = formatScriptedText(name);
+      block.appendChild(span);
+    });
+    return block;
+  };
+
+  corner.appendChild(buildBlock(layout.rowVars, 'kmap-vars-row'));
+  corner.appendChild(buildBlock(layout.colVars, 'kmap-vars-col'));
+  return corner;
+}
+
+function buildKmapTable(kmap, layout, submap) {
+  const table = document.createElement('table');
+  table.className = 'kmap-table';
+
+  const headerRow = document.createElement('tr');
+  const cornerCell = document.createElement('th');
+  cornerCell.rowSpan = 1;
+  cornerCell.appendChild(buildKmapCornerLabel(layout));
+  headerRow.appendChild(cornerCell);
+
+  layout.colCodes.forEach((code) => {
+    const th = document.createElement('th');
+    const span = document.createElement('span');
+    span.className = 'kmap-gray-code kmap-gray-col';
+    span.textContent = code || '0';
+    th.appendChild(span);
+    headerRow.appendChild(th);
+  });
+  table.appendChild(headerRow);
+
+  layout.rowCodes.forEach((rowCode, rIdx) => {
+    const tr = document.createElement('tr');
+    const rowHeader = document.createElement('th');
+    const span = document.createElement('span');
+    span.className = 'kmap-gray-code kmap-gray-row';
+    span.textContent = rowCode || '0';
+    rowHeader.appendChild(span);
+    tr.appendChild(rowHeader);
+
+    layout.colCodes.forEach((colCode, cIdx) => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      const rowIndex = submap.rowOffset + rIdx;
+      const colIndex = submap.colOffset + cIdx;
+      input.dataset.kmapId = kmap.id;
+      input.dataset.rowIndex = rowIndex;
+      input.dataset.colIndex = colIndex;
+      input.dataset.totalRows = layout.totalRows;
+      input.dataset.totalCols = layout.totalCols;
+      input.classList.add('kmap-cell-input');
+      input.value = (kmap.cells && kmap.cells[kmapCellKey(rowIndex, colIndex)]) || '';
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+
+  return table;
+}
+
+function renderKmaps() {
+  if (!kmapList) return;
+  kmapList.innerHTML = '';
+  const hasKmaps = (state.kmaps || []).length > 0;
+  kmapEmptyState.classList.toggle('hidden', hasKmaps);
+
+  state.kmaps.forEach((kmap) => {
+    const card = document.createElement('div');
+    card.className = 'kmap-card';
+    const layout = buildKmapLayout(kmap);
+    card.dataset.totalRows = layout.totalRows;
+    card.dataset.totalCols = layout.totalCols;
+
+    const heading = document.createElement('span');
+    heading.className = 'kmap-title';
+    heading.innerHTML = formatScriptedText(kmap.label || 'K-map');
+    card.appendChild(heading);
+
+    const meta = document.createElement('div');
+    meta.className = 'kmap-meta';
+    meta.innerHTML = `
+      <span><strong>Type:</strong> ${kmap.type?.toUpperCase() || 'SOP'}</span>
+      <span><strong>Direction:</strong> ${kmap.direction === 'vertical' ? 'Vertical' : 'Horizontal'}</span>
+      <span><strong>Variables:</strong> ${formatVariableList(kmap.variables || [])}</span>
+    `;
+    card.appendChild(meta);
+
+    const gridCollection = document.createElement('div');
+    gridCollection.className = 'kmap-grid-collection';
+    gridCollection.style.gridTemplateColumns = `repeat(${layout.mapCols}, minmax(${layout.baseCols * 60 + 90}px, 1fr))`;
+
+    layout.submaps.forEach((sub) => {
+      const submap = document.createElement('div');
+      submap.className = 'kmap-submap';
+      submap.style.gridColumn = sub.mapCol + 1;
+      submap.style.gridRow = sub.mapRow + 1;
+      const label = document.createElement('div');
+      label.className = 'kmap-submap-label';
+      label.innerHTML = sub.label ? formatScriptedText(sub.label) : '&nbsp;';
+      submap.appendChild(label);
+      submap.appendChild(buildKmapTable(kmap, layout, sub));
+      gridCollection.appendChild(submap);
+    });
+
+    card.appendChild(gridCollection);
+
+    const expressionRow = document.createElement('div');
+    expressionRow.className = 'kmap-expression';
+    const symbol = kmap.type === 'pos' ? 'Π' : 'Σ';
+
+    const variableTray = document.createElement('div');
+    variableTray.className = 'kmap-variable-tray';
+    const trayLabel = document.createElement('span');
+    trayLabel.className = 'kmap-tray-label';
+    trayLabel.textContent = 'Variables';
+    variableTray.appendChild(trayLabel);
+    const trayItems = document.createElement('div');
+    trayItems.className = 'kmap-variable-items';
+    const tokens = kmap.variables?.length ? kmap.variables : ['—'];
+    tokens.forEach((name) => {
+      trayItems.appendChild(buildTrayToken({ type: 'var', value: name }));
+    });
+    ['+', '*', '(', ')'].forEach((op) => {
+      trayItems.appendChild(buildTrayToken({ type: op === '(' || op === ')' ? 'paren' : 'op', value: op }));
+    });
+    variableTray.appendChild(trayItems);
+    expressionRow.appendChild(variableTray);
+
+    const label = document.createElement('span');
+    label.className = 'kmap-expression-label';
+    label.innerHTML = `${formatScriptedText(kmap.label || 'K-map')} ${symbol} =`;
+    expressionRow.appendChild(label);
+
+    const exprTrayWrapper = document.createElement('div');
+    exprTrayWrapper.className = 'kmap-expression-tray-wrapper';
+    const exprTray = document.createElement('div');
+    exprTray.className = 'kmap-expression-tray';
+    exprTray.tabIndex = 0;
+    exprTray.dataset.kmapId = kmap.id;
+    const parsedTokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+    kmap.expressionTokens = parsedTokens;
+    renderExpressionTray(exprTray, parsedTokens, kmap.id);
+    exprTrayWrapper.appendChild(exprTray);
+
+    const controls = document.createElement('div');
+    controls.className = 'kmap-expression-actions';
+    const verifyBtn = document.createElement('button');
+    verifyBtn.textContent = 'Verify';
+    verifyBtn.type = 'button';
+    verifyBtn.dataset.verifyKmap = kmap.id;
+    controls.appendChild(verifyBtn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove K-map';
+    removeBtn.dataset.removeKmap = kmap.id;
+    controls.appendChild(removeBtn);
+
+    exprTrayWrapper.appendChild(controls);
+    expressionRow.appendChild(exprTrayWrapper);
+
+    card.appendChild(expressionRow);
+    kmapList.appendChild(card);
+  });
+}
+
+function openKmapWindow() {
+  if (!kmapWindow) return;
+  renderKmaps();
+  if (kmapWindowState.left === null || kmapWindowState.top === null) {
+    const centeredLeft = Math.max(12, (window.innerWidth - kmapWindowState.width) / 2);
+    const centeredTop = Math.max(12, (window.innerHeight - kmapWindowState.height) / 2);
+    kmapWindowState.left = centeredLeft;
+    kmapWindowState.top = centeredTop;
+  }
+  kmapWindow.style.width = `${kmapWindowState.width}px`;
+  kmapWindow.style.height = `${kmapWindowState.height}px`;
+  kmapWindow.style.left = `${kmapWindowState.left}px`;
+  kmapWindow.style.top = `${kmapWindowState.top}px`;
+  kmapWindow.style.transform = 'none';
+  kmapWindow.classList.remove('hidden');
+}
+
+function showKmapWorkspace() {
+  openTransitionDrawer();
+  openKmapWindow();
+}
+
+function closeKmapWindow() {
+  if (kmapWindow) kmapWindow.classList.add('hidden');
+}
+
+function resetKmapDialog() {
+  kmapLabelInput.value = kmapFormMemory.label || '';
+  kmapVariablesInput.value = kmapFormMemory.variables || '';
+  kmapTypeInput.value = kmapFormMemory.type || 'sop';
+  kmapDirectionInput.value = kmapFormMemory.direction || 'horizontal';
+  confirmKmapCreate.disabled = true;
+}
+
+function validateKmapDialog() {
+  const vars = parseKmapVariables(kmapVariablesInput.value);
+  const label = kmapLabelInput.value.trim();
+  const isValid = vars.length >= 2 && vars.length <= 6 && label.length > 0;
+  confirmKmapCreate.disabled = !isValid;
+}
+
+function openKmapDialog() {
+  resetKmapDialog();
+  validateKmapDialog();
+  openDialog('kmapCreateDialog');
+}
+
+function createKmapFromDialog() {
+  const variables = parseKmapVariables(kmapVariablesInput.value);
+  const label = kmapLabelInput.value.trim() || 'K-map';
+  kmapFormMemory = {
+    label,
+    variables: kmapVariablesInput.value,
+    type: kmapTypeInput.value,
+    direction: kmapDirectionInput.value,
+  };
+  const newMap = {
+    id: Date.now(),
+    label,
+    variables,
+    type: kmapTypeInput.value,
+    direction: kmapDirectionInput.value,
+    cells: {},
+    expression: '',
+  };
+  state.kmaps.push(newMap);
+  renderKmaps();
+  closeDialog('kmapCreateDialog');
+  showKmapWorkspace();
+  markDirty();
 }
 
 function captureImage(element, filename) {
@@ -1266,6 +2419,66 @@ function attachEvents() {
   );
   toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
+  if (toggleTransitionBuilderBtn && transitionColumnBuilder) {
+    toggleTransitionBuilderBtn.addEventListener('click', () => {
+      const collapsed = transitionColumnBuilder.classList.toggle('collapsed');
+      toggleTransitionBuilderBtn.textContent = collapsed ? 'Show builder' : 'Hide builder';
+      toggleTransitionBuilderBtn.setAttribute('aria-expanded', (!collapsed).toString());
+    });
+  }
+  document.getElementById('kmapToggle').addEventListener('click', () => {
+    if (kmapWindow.classList.contains('hidden')) showKmapWorkspace();
+    else closeKmapWindow();
+  });
+  document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
+  document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
+  confirmKmapCreate.addEventListener('click', createKmapFromDialog);
+  kmapLabelInput.addEventListener('input', validateKmapDialog);
+  kmapVariablesInput.addEventListener('input', validateKmapDialog);
+  kmapWindowHeader.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return;
+    const rect = kmapWindow.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    const moveHandler = (ev) => {
+      const newLeft = Math.min(Math.max(0, ev.clientX - offsetX), window.innerWidth - rect.width + 12);
+      const newTop = Math.min(Math.max(0, ev.clientY - offsetY), window.innerHeight - rect.height + 12);
+      kmapWindowState.left = newLeft;
+      kmapWindowState.top = newTop;
+      kmapWindow.style.left = `${newLeft}px`;
+      kmapWindow.style.top = `${newTop}px`;
+      kmapWindow.style.transform = 'none';
+    };
+    const upHandler = () => {
+      document.removeEventListener('mousemove', moveHandler);
+      document.removeEventListener('mouseup', upHandler);
+    };
+    document.addEventListener('mousemove', moveHandler);
+    document.addEventListener('mouseup', upHandler);
+  });
+
+  kmapResizeHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const rect = kmapWindow.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = rect.width;
+    const startHeight = rect.height;
+    const resizeHandler = (ev) => {
+      const newWidth = Math.max(520, Math.min(window.innerWidth - rect.left - 12, startWidth + (ev.clientX - startX)));
+      const newHeight = Math.max(320, Math.min(window.innerHeight - rect.top - 12, startHeight + (ev.clientY - startY)));
+      kmapWindowState.width = newWidth;
+      kmapWindowState.height = newHeight;
+      kmapWindow.style.width = `${newWidth}px`;
+      kmapWindow.style.height = `${newHeight}px`;
+    };
+    const stopResize = () => {
+      document.removeEventListener('mousemove', resizeHandler);
+      document.removeEventListener('mouseup', stopResize);
+    };
+    document.addEventListener('mousemove', resizeHandler);
+    document.addEventListener('mouseup', stopResize);
+  });
 
   document.getElementById('createMachine').addEventListener('click', () => {
     state.name = document.getElementById('machineName').value || 'Untitled Machine';
@@ -1281,9 +2494,11 @@ function attachEvents() {
     renderPalette();
     renderTransitionTable();
     renderDiagram();
+    state.kmaps = [];
+    renderKmaps();
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
-    clearVerificationStatus();
+    setVerificationStatus(null);
     clearDirty();
   });
 
@@ -1524,6 +2739,328 @@ function attachEvents() {
       nextInput.focus();
       nextInput.select();
       e.preventDefault();
+    }
+  });
+
+  transitionDrawer.addEventListener('dragstart', (e) => {
+    const token = e.target.closest('.transition-token, .transition-column-token');
+    if (!token) return;
+    const type = token.dataset.tokenType;
+    const value = token.dataset.tokenValue;
+    const fromIndex = token.classList.contains('transition-column-token')
+      ? parseInt(token.dataset.index, 10)
+      : null;
+    transitionColumnDragState = {
+      source: token.classList.contains('transition-column-token') ? 'selection' : 'tray',
+      type,
+      value,
+      fromIndex,
+    };
+    e.dataTransfer.setData('text/plain', `${type}:${value}`);
+  });
+
+  transitionDrawer.addEventListener('dragover', (e) => {
+    const tray = e.target.closest('#transitionColumnDropzone');
+    if (!tray) return;
+    e.preventDefault();
+    const marker = ensureDropMarker(tray);
+    const targetToken = e.target.closest('.transition-column-token');
+    if (targetToken && targetToken.parentNode === tray) {
+      const rect = targetToken.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      tray.insertBefore(marker, before ? targetToken : targetToken.nextSibling);
+    } else if (!marker.parentNode) {
+      tray.appendChild(marker);
+    }
+    const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = sequence.indexOf(marker);
+    marker.dataset.index = markerIndex === -1 ? sequence.length : markerIndex;
+  });
+
+  transitionDrawer.addEventListener('dragleave', (e) => {
+    const tray = e.target.closest('#transitionColumnDropzone');
+    if (tray && !tray.contains(e.relatedTarget)) {
+      clearDropMarker(tray);
+    }
+  });
+
+  transitionDrawer.addEventListener('drop', (e) => {
+    const tray = e.target.closest('#transitionColumnDropzone');
+    if (!tray) return;
+    e.preventDefault();
+    const marker = tray.querySelector('.kmap-drop-marker');
+    const payload = transitionColumnDragState;
+    transitionColumnDragState = null;
+    if (!payload || !payload.type) return;
+
+    const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = marker ? sequence.indexOf(marker) : -1;
+    let index = markerIndex === -1 ? sequence.filter((el) => el.classList.contains('kmap-expr-token')).length : markerIndex;
+    clearDropMarker(tray);
+
+    const columns = [...(state.transitionTable.columns || [])];
+    const templates = state.transitionTable?.availableColumns || buildTransitionColumnTemplates();
+
+    if (payload.source === 'selection' && !Number.isNaN(payload.fromIndex)) {
+      if (payload.fromIndex >= 0 && payload.fromIndex < columns.length) {
+        const [moved] = columns.splice(payload.fromIndex, 1);
+        if (index > payload.fromIndex) index -= 1;
+        columns.splice(Math.max(0, Math.min(columns.length, index)), 0, moved);
+      }
+    } else if (payload.source === 'tray') {
+      const template =
+        templates.find((tpl) => tpl.key === payload.value && tpl.type === payload.type) ||
+        (payload.type === 'spacer' ? { key: 'spacer', label: '', type: 'spacer', allowMultiple: true } : null);
+      if (!template) return;
+      if (template.type === 'spacer') {
+        columns.splice(Math.max(0, Math.min(columns.length, index)), 0, createSpacerColumn());
+      } else {
+        columns.splice(
+          Math.max(0, Math.min(columns.length, index)),
+          0,
+          createColumnInstance(template),
+        );
+      }
+    }
+
+    state.transitionTable.columns = columns;
+    renderTransitionTable();
+    markDirty();
+  });
+
+  transitionDrawer.addEventListener('dragend', () => {
+    document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
+    transitionColumnDragState = null;
+  });
+
+  if (transitionColumnDropzone) {
+    transitionColumnDropzone.addEventListener('click', (e) => {
+      transitionColumnDropzone.focus();
+      const token = e.target.closest('.transition-column-token');
+      transitionColumnDropzone
+        .querySelectorAll('.transition-column-token.selected')
+        .forEach((el) => el.classList.remove('selected'));
+      if (token) token.classList.add('selected');
+    });
+
+    transitionColumnDropzone.addEventListener('keydown', (e) => {
+      if (!['Backspace', 'Delete'].includes(e.key)) return;
+      const selected = transitionColumnDropzone.querySelector('.transition-column-token.selected');
+      if (!selected) return;
+      const idx = parseInt(selected.dataset.index, 10);
+      if (Number.isNaN(idx)) return;
+      const columns = [...(state.transitionTable.columns || [])];
+      columns.splice(idx, 1);
+      state.transitionTable.columns = columns;
+      renderTransitionTable();
+      markDirty();
+      e.preventDefault();
+    });
+  }
+
+  kmapList.addEventListener('input', (e) => {
+    const target = e.target;
+    if (target.classList.contains('kmap-cell-input')) {
+      let val = (target.value || '').toUpperCase().replace(/[^01X]/g, '');
+      if (val.length > 1) val = val[0];
+      target.value = val;
+      const kmap = state.kmaps.find((m) => m.id.toString() === target.dataset.kmapId);
+      if (!kmap) return;
+      if (!kmap.cells) kmap.cells = {};
+      kmap.cells[kmapCellKey(target.dataset.rowIndex, target.dataset.colIndex)] = val;
+      markDirty();
+    }
+  });
+
+  kmapList.addEventListener('dragstart', (e) => {
+    const tokenEl = e.target.closest('.kmap-token, .kmap-expr-token');
+    if (!tokenEl) return;
+    const type = tokenEl.dataset.tokenType;
+    const value = tokenEl.dataset.tokenValue;
+    const fromIndex = tokenEl.classList.contains('kmap-expr-token')
+      ? parseInt(tokenEl.dataset.index, 10)
+      : null;
+    const cardKmapId =
+      tokenEl.closest('.kmap-card')?.querySelector('.kmap-expression-tray')?.dataset.kmapId;
+    const kmapId = tokenEl.dataset.kmapId || cardKmapId;
+    kmapExpressionDragState = {
+      source: tokenEl.classList.contains('kmap-expr-token') ? 'expression' : 'tray',
+      type,
+      value,
+      fromIndex,
+      kmapId,
+    };
+    e.dataTransfer.setData('text/plain', `${type}:${value}`);
+  });
+
+  kmapList.addEventListener('dragover', (e) => {
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (!tray) return;
+    e.preventDefault();
+    const tokens = [...(getKmapById(tray.dataset.kmapId)?.expressionTokens || [])];
+    const targetToken = e.target.closest('.kmap-expr-token');
+    const marker = ensureDropMarker(tray);
+    if (targetToken && targetToken.parentNode === tray) {
+      const rect = targetToken.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      tray.insertBefore(marker, before ? targetToken : targetToken.nextSibling);
+    } else if (!marker.parentNode) {
+      tray.appendChild(marker);
+    }
+    const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = sequence.indexOf(marker);
+    const index = markerIndex === -1 ? tokens.length : markerIndex;
+    marker.dataset.index = index;
+  });
+
+  kmapList.addEventListener('dragleave', (e) => {
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (tray && !tray.contains(e.relatedTarget)) {
+      clearDropMarker(tray);
+    }
+  });
+
+  kmapList.addEventListener('drop', (e) => {
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (!tray) return;
+    e.preventDefault();
+    const marker = tray.querySelector('.kmap-drop-marker');
+    const kmap = getKmapById(tray.dataset.kmapId);
+    if (!kmap) return;
+    const tokens = [...(kmap.expressionTokens || [])];
+    const payload = kmapExpressionDragState;
+    kmapExpressionDragState = null;
+    if (!payload || !payload.type) return;
+
+    let index = tokens.length;
+    if (marker && marker.parentNode === tray) {
+      const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+      const markerIndex = sequence.indexOf(marker);
+      index = markerIndex === -1 ? tokens.length : markerIndex;
+    }
+    clearDropMarker(tray);
+
+    if (payload.source === 'expression' && payload.kmapId === kmap.id.toString()) {
+      if (!Number.isNaN(payload.fromIndex)) {
+        tokens.splice(payload.fromIndex, 1);
+        if (index > payload.fromIndex) index -= 1;
+      }
+    }
+
+    const token = { type: payload.type, value: payload.value };
+    if (token.type === 'var') token.negated = false;
+    tokens.splice(Math.max(0, Math.min(tokens.length, index)), 0, token);
+    updateKmapExpressionTokens(kmap, tokens, tray);
+    markDirty();
+  });
+
+  kmapList.addEventListener('dragend', () => {
+    document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
+    kmapExpressionDragState = null;
+  });
+
+  kmapList.addEventListener('focusin', (e) => {
+    if (e.target.classList.contains('kmap-cell-input')) {
+      e.target.select();
+    }
+  });
+
+  kmapList.addEventListener('keydown', (e) => {
+    const target = e.target;
+    const exprTray = target.closest && target.closest('.kmap-expression-tray');
+    if (exprTray) {
+      const kmap = getKmapById(exprTray.dataset.kmapId);
+      if (!kmap) return;
+      const tokens = [...(kmap.expressionTokens || [])];
+      const selected = exprTray.querySelector('.kmap-expr-token.selected');
+      if ((e.key === 'Backspace' || e.key === 'Delete') && selected) {
+        const idx = parseInt(selected.dataset.index, 10);
+        if (!Number.isNaN(idx)) {
+          tokens.splice(idx, 1);
+          updateKmapExpressionTokens(kmap, tokens, exprTray);
+          markDirty();
+        }
+        e.preventDefault();
+      }
+      return;
+    }
+    if (!target.classList.contains('kmap-cell-input')) return;
+    const { key } = e;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+    const card = target.closest('.kmap-card');
+    if (!card) return;
+    const totalRows = parseInt(card.dataset.totalRows || '0', 10);
+    const totalCols = parseInt(card.dataset.totalCols || '0', 10);
+    if (!totalRows || !totalCols) return;
+    const rowIdx = parseInt(target.dataset.rowIndex, 10);
+    const colIdx = parseInt(target.dataset.colIndex, 10);
+    if (Number.isNaN(rowIdx) || Number.isNaN(colIdx)) return;
+    let nextRow = rowIdx;
+    let nextCol = colIdx;
+    if (key === 'ArrowLeft') nextCol = Math.max(0, colIdx - 1);
+    if (key === 'ArrowRight') nextCol = Math.min(totalCols - 1, colIdx + 1);
+    if (key === 'ArrowUp') nextRow = Math.max(0, rowIdx - 1);
+    if (key === 'ArrowDown') nextRow = Math.min(totalRows - 1, rowIdx + 1);
+
+    const selector = `.kmap-cell-input[data-row-index="${nextRow}"][data-col-index="${nextCol}"]`;
+    const nextInput = card.querySelector(selector);
+    if (nextInput) {
+      nextInput.focus();
+      nextInput.select();
+      e.preventDefault();
+    }
+  });
+
+  kmapList.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('[data-remove-kmap]');
+    if (removeBtn) {
+      const id = removeBtn.dataset.removeKmap;
+      state.kmaps = state.kmaps.filter((k) => k.id.toString() !== id);
+      renderKmaps();
+      markDirty();
+      return;
+    }
+
+    const verifyBtn = e.target.closest('[data-verify-kmap]');
+    if (verifyBtn) {
+      const kmap = state.kmaps.find((m) => m.id.toString() === verifyBtn.dataset.verifyKmap);
+      const result = verifyKmapExpression(kmap);
+      verifyBtn.classList.toggle('verified', !!result.passed);
+      verifyBtn.classList.toggle('failed', !result.passed);
+      verifyBtn.title = result.passed
+        ? 'Expression matches K-map'
+        : result.reason || 'Expression verification failed';
+      return;
+    }
+
+    const exprToken = e.target.closest('.kmap-expr-token');
+    if (exprToken) {
+      const tray = exprToken.closest('.kmap-expression-tray');
+      const kmap = tray ? getKmapById(tray.dataset.kmapId) : null;
+      if (!kmap) return;
+      tray.focus();
+      const idx = parseInt(exprToken.dataset.index, 10);
+      if (Number.isNaN(idx)) return;
+      const tokens = [...(kmap.expressionTokens || [])];
+      const token = tokens[idx];
+      if (!token) return;
+      tray.querySelectorAll('.kmap-expr-token.selected').forEach((el) =>
+        el.classList.remove('selected'),
+      );
+      if (token.type === 'var') {
+        token.negated = !token.negated;
+      }
+      updateKmapExpressionTokens(kmap, tokens, tray);
+      const newToken = tray.querySelector(`.kmap-expr-token[data-index="${idx}"]`);
+      if (newToken) newToken.classList.add('selected');
+      markDirty();
+      return;
+    }
+
+    const tray = e.target.closest('.kmap-expression-tray');
+    if (tray) {
+      tray.focus();
+      tray.querySelectorAll('.kmap-expr-token.selected').forEach((el) => el.classList.remove('selected'));
     }
   });
 
@@ -1815,6 +3352,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderTable();
   renderTransitionTable();
   renderPalette();
+  renderKmaps();
   applyViewTransform();
   renderDiagram();
 });
