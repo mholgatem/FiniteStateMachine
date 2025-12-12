@@ -25,6 +25,10 @@ let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
+let transitionColumnOptions = [];
+let transitionColumnOptionMap = new Map();
+let verifyStatusTimeout = null;
+const verifyButtonDefaultText = 'Verify Transition Table';
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -45,6 +49,8 @@ const outputChoices = document.getElementById('outputChoices');
 const transitionDrawer = document.getElementById('transitionDrawer');
 const transitionTableHead = document.getElementById('transitionTableHead');
 const transitionTableBody = document.getElementById('transitionTableBody');
+const transitionColumnTray = document.getElementById('transitionColumnTray');
+const transitionColumnDropZone = document.getElementById('transitionColumnDropZone');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
@@ -96,26 +102,39 @@ function openDialog(id) {
 
 function clearVerificationStatus() {
   const verifyBtn = document.getElementById('verifyTransitionTable');
-  if (verifyBtn) {
-    verifyBtn.classList.remove('verified', 'failed');
-    verifyBtn.removeAttribute('title');
-  }
+  if (verifyStatusTimeout) clearTimeout(verifyStatusTimeout);
+  if (!verifyBtn) return;
+  verifyBtn.classList.remove('verified', 'failed');
+  verifyBtn.removeAttribute('title');
+  verifyBtn.textContent = verifyButtonDefaultText;
+  state.transitionTableVerified = false;
 }
 
 function setVerificationStatus(passed) {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
   verifyBtn.classList.remove('verified', 'failed');
+  verifyBtn.textContent = verifyButtonDefaultText;
+  verifyBtn.removeAttribute('title');
+  if (verifyStatusTimeout) clearTimeout(verifyStatusTimeout);
+
   if (passed === true) {
     verifyBtn.classList.add('verified');
     verifyBtn.title = 'Your transition table matches your transition diagram';
+    verifyBtn.textContent = '✔ Verified';
     state.transitionTableVerified = true;
     return;
   }
   if (passed === false) {
     verifyBtn.classList.add('failed');
     verifyBtn.title = 'Your transition table DOES NOT match your transition diagram';
+    verifyBtn.textContent = "✕ Table & Diagram don't match";
     state.transitionTableVerified = false;
+    verifyStatusTimeout = setTimeout(() => {
+      verifyBtn.classList.remove('failed');
+      verifyBtn.textContent = verifyButtonDefaultText;
+      verifyBtn.removeAttribute('title');
+    }, 2000);
     return;
   }
   state.transitionTableVerified = false;
@@ -405,47 +424,125 @@ function generateInputCombos(count) {
   return combos;
 }
 
+function buildTransitionColumnOptions() {
+  const options = [];
+  const bitCount = stateBitCount();
+
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    options.push({ key: `q_${i}`, label: `Q_${i}`, type: 'value', role: 'current', bitIndex: i });
+  }
+
+  state.inputs.forEach((name, idx) => {
+    options.push({
+      key: `in_${idx}`,
+      label: name || `Input ${idx + 1}`,
+      type: 'value',
+      role: 'input',
+      bitIndex: idx,
+    });
+  });
+
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    options.push({ key: `next_q_${i}`, label: `Q_${i}^+`, type: 'value', role: 'next', bitIndex: i });
+  }
+
+  state.outputs.forEach((name, idx) => {
+    options.push({
+      key: `out_${idx}`,
+      label: name || `Output ${idx + 1}`,
+      type: 'value',
+      role: 'output',
+      bitIndex: idx,
+    });
+  });
+
+  options.push({ key: 'spacer', label: 'Spacer', type: 'spacer', role: 'spacer' });
+  return options;
+}
+
+function uniqueColumnKey(optionKey) {
+  const existing = new Set((state.transitionTable?.headerColumns || []).map((c) => c.key));
+  let key = optionKey || 'col';
+  let counter = 1;
+  while (existing.has(key)) {
+    key = `${optionKey}__${counter}`;
+    counter += 1;
+  }
+  return key;
+}
+
+function migrateLegacyTransitionColumns() {
+  if (state.transitionTable.headerColumns) return;
+  const legacyColumns = Array.isArray(state.transitionTable.columns)
+    ? state.transitionTable.columns.filter((col) => col.type === 'value' || col.type === 'spacer')
+    : [];
+  state.transitionTable.headerColumns = legacyColumns.map((col, idx) => {
+    const optionKey = col.key || col.optionKey || `legacy_${idx}`;
+    let role = 'spacer';
+    if (optionKey.startsWith('q_')) role = 'current';
+    if (optionKey.startsWith('in_')) role = 'input';
+    if (optionKey.startsWith('next_q_')) role = 'next';
+    if (optionKey.startsWith('out_')) role = 'output';
+    return {
+      key: optionKey,
+      optionKey: optionKey === 'spacer_0' ? 'spacer' : optionKey,
+      label: col.label || optionKey,
+      type: col.type === 'spacer' ? 'spacer' : 'value',
+      role,
+      bitIndex: col.bitIndex,
+      index: col.index,
+    };
+  });
+}
+
+function syncHeaderColumnsWithOptions() {
+  if (!state.transitionTable.headerColumns) migrateLegacyTransitionColumns();
+  if (!Array.isArray(state.transitionTable.headerColumns)) state.transitionTable.headerColumns = [];
+
+  const cleaned = [];
+  const seenKeys = new Set();
+
+  state.transitionTable.headerColumns.forEach((col) => {
+    const optionKey = col.optionKey || col.key;
+    if (optionKey === 'spacer') {
+      const key = seenKeys.has(col.key) ? uniqueColumnKey('spacer') : col.key || uniqueColumnKey('spacer');
+      cleaned.push({ key, optionKey: 'spacer', label: 'Spacer', type: 'spacer', role: 'spacer' });
+      seenKeys.add(key);
+      return;
+    }
+
+    const option = transitionColumnOptionMap.get(optionKey);
+    if (!option) return;
+    let key = col.key || uniqueColumnKey(option.key);
+    if (seenKeys.has(key)) key = uniqueColumnKey(option.key);
+    cleaned.push({
+      key,
+      optionKey: option.key,
+      label: option.label,
+      type: option.type,
+      role: option.role,
+      bitIndex: option.bitIndex,
+      index: option.index,
+    });
+    seenKeys.add(key);
+  });
+
+  state.transitionTable.headerColumns = cleaned;
+}
+
 function ensureTransitionTableStructure() {
   if (!state.transitionTable || typeof state.transitionTable !== 'object') {
     state.transitionTable = { cells: {} };
   }
   if (!state.transitionTable.cells) state.transitionTable.cells = {};
 
-  const bitCount = stateBitCount();
-  const stateBitCols = [];
-  for (let i = bitCount - 1; i >= 0; i -= 1) {
-    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}`, type: 'value' });
-  }
+  transitionColumnOptions = buildTransitionColumnOptions();
+  transitionColumnOptionMap = new Map(transitionColumnOptions.map((opt) => [opt.key, opt]));
+  syncHeaderColumnsWithOptions();
 
-  const nextStateBitCols = [];
-  for (let i = bitCount - 1; i >= 0; i -= 1) {
-    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q_${i}^+`, type: 'value' });
-  }
+  const columns = [{ key: 'row_index', label: '#', type: 'rowIndex' }, ...state.transitionTable.headerColumns];
 
-  const inputCols = state.inputs.map((name, idx) => ({
-    key: `in_${idx}`,
-    label: name || `Input ${idx + 1}`,
-    type: 'value',
-  }));
-  const outputCols = state.outputs.map((name, idx) => ({
-    key: `out_${idx}`,
-    label: name || `Output ${idx + 1}`,
-    type: 'value',
-  }));
-
-  const columns = [
-    { key: 'row_index', label: '#', type: 'rowIndex' },
-    { key: 'spacer_0', label: '', type: 'spacer' },
-    ...stateBitCols,
-    { key: 'spacer_state_inputs', label: '', type: 'spacer' },
-    ...inputCols,
-    { key: 'spacer_1', label: '', type: 'spacer' },
-    ...nextStateBitCols,
-    { key: 'spacer_2', label: '', type: 'spacer' },
-    ...outputCols,
-  ];
-
-  transitionTableValueColumns = columns.filter((col) => col.type === 'value');
+  transitionTableValueColumns = state.transitionTable.headerColumns.filter((col) => col.type === 'value');
 
   const combos = generateInputCombos(state.inputs.length);
   transitionTableGroupSize = combos.length || 1;
@@ -484,8 +581,85 @@ function confirmTransitionTableReset(kind) {
   return window.confirm(`Changing the number of ${kind} will reset your transition table, proceed?`);
 }
 
+function addTransitionHeaderColumn(optionKey) {
+  const option = transitionColumnOptionMap.get(optionKey);
+  if (!option) return;
+  if (!state.transitionTable.headerColumns) state.transitionTable.headerColumns = [];
+  const key = uniqueColumnKey(option.key);
+  state.transitionTable.headerColumns.push({
+    key,
+    optionKey: option.key,
+    label: option.label,
+    type: option.type,
+    role: option.role,
+    bitIndex: option.bitIndex,
+    index: option.index,
+  });
+  renderTransitionTable();
+  markDirty();
+}
+
+function removeTransitionHeaderColumn(columnKey) {
+  if (!state.transitionTable.headerColumns) return;
+  const next = state.transitionTable.headerColumns.filter((col) => col.key !== columnKey);
+  if (next.length === state.transitionTable.headerColumns.length) return;
+  state.transitionTable.headerColumns = next;
+  renderTransitionTable();
+  markDirty();
+}
+
+function moveTransitionHeaderColumnToEnd(columnKey) {
+  if (!state.transitionTable.headerColumns) return;
+  const idx = state.transitionTable.headerColumns.findIndex((col) => col.key === columnKey);
+  if (idx === -1) return;
+  const [col] = state.transitionTable.headerColumns.splice(idx, 1);
+  state.transitionTable.headerColumns.push(col);
+  renderTransitionTable();
+  markDirty();
+}
+
+function renderTransitionColumnBuilder() {
+  if (!transitionColumnTray || !transitionColumnDropZone) return;
+  transitionColumnTray.innerHTML = '';
+  transitionColumnOptions.forEach((opt) => {
+    const tile = document.createElement('div');
+    tile.className = 'tray-tile';
+    tile.draggable = true;
+    tile.dataset.optionKey = opt.key;
+    tile.innerHTML = formatScriptedText(opt.label);
+    transitionColumnTray.appendChild(tile);
+  });
+
+  transitionColumnDropZone.innerHTML = '';
+  const columns = state.transitionTable.headerColumns || [];
+  if (!columns.length) {
+    transitionColumnDropZone.classList.add('empty');
+  } else {
+    transitionColumnDropZone.classList.remove('empty');
+  }
+
+  columns.forEach((col) => {
+    const chip = document.createElement('div');
+    chip.className = 'tile-chip drop-tile';
+    chip.draggable = true;
+    chip.dataset.columnKey = col.key;
+    chip.dataset.optionKey = col.optionKey;
+    const label = document.createElement('span');
+    label.innerHTML = formatScriptedText(col.label);
+    chip.appendChild(label);
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-chip';
+    removeBtn.type = 'button';
+    removeBtn.dataset.removeColumn = col.key;
+    removeBtn.textContent = '✕';
+    chip.appendChild(removeBtn);
+    transitionColumnDropZone.appendChild(chip);
+  });
+}
+
 function renderTransitionTable() {
   ensureTransitionTableStructure();
+  renderTransitionColumnBuilder();
   transitionTableHead.innerHTML = '';
   transitionTableBody.innerHTML = '';
 
@@ -495,7 +669,7 @@ function renderTransitionTable() {
   );
   state.transitionTable.columns.forEach((col) => {
     const th = document.createElement('th');
-    th.innerHTML = formatScriptedText(col.label);
+    th.innerHTML = col.type === 'spacer' ? '' : formatScriptedText(col.label);
     if (col.type === 'spacer') th.classList.add('col-spacer');
     if (col.type === 'rowIndex') th.classList.add('row-index-cell');
     headerRow.appendChild(th);
@@ -524,7 +698,9 @@ function renderTransitionTable() {
       input.dataset.rowKey = row.key;
       input.dataset.colKey = col.key;
       input.dataset.rowIndex = rowIdx;
-      input.dataset.valueColIndex = valueIndexMap.get(col.key);
+      const valueIndex = valueIndexMap.get(col.key);
+      if (valueIndex !== undefined) input.dataset.valueColIndex = valueIndex;
+      input.dataset.role = col.role;
       input.value = state.transitionTable.cells[`${row.key}::${col.key}`] || '';
       td.appendChild(input);
       tr.appendChild(td);
@@ -775,13 +951,13 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
   ensureTransitionTableStructure();
   const { expectations, conflict } = buildDiagramExpectations();
 
-  const currentStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('q_'));
-  const inputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('in_'));
-  const nextStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('next_q_'));
-  const outputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('out_'));
+  const currentStateCols = transitionTableValueColumns.filter((col) => col.role === 'current');
+  const inputCols = transitionTableValueColumns.filter((col) => col.role === 'input');
+  const nextStateCols = transitionTableValueColumns.filter((col) => col.role === 'next');
+  const outputCols = transitionTableValueColumns.filter((col) => col.role === 'output');
   const bitCount = currentStateCols.length;
 
-  let matches = !conflict;
+  let matches = !conflict && transitionTableValueColumns.length > 0;
 
   state.transitionTable.rows.forEach((row) => {
     if (!matches) return;
@@ -817,9 +993,6 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
     setVerificationStatus(true);
     if (recordStatus) unsavedChanges = true;
   } else {
-    if (!silent) {
-      window.alert('Your state transition table does not match your state transition diagram');
-    }
     setVerificationStatus(false);
     if (recordStatus) unsavedChanges = true;
   }
@@ -2427,6 +2600,52 @@ function attachEvents() {
   document
     .getElementById('verifyTransitionTable')
     .addEventListener('click', verifyTransitionTableAgainstDiagram);
+
+  if (transitionColumnTray) {
+    transitionColumnTray.addEventListener('dragstart', (e) => {
+      const tile = e.target.closest('.tray-tile');
+      if (!tile) return;
+      e.dataTransfer.setData('text/option-key', tile.dataset.optionKey);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+  }
+
+  if (transitionColumnDropZone) {
+    transitionColumnDropZone.addEventListener('dragover', (e) => {
+      const types = Array.from(e.dataTransfer.types || []);
+      if (types.includes('text/option-key') || types.includes('text/column-key')) {
+        e.preventDefault();
+        transitionColumnDropZone.classList.add('drag-over');
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+    transitionColumnDropZone.addEventListener('dragleave', () => {
+      transitionColumnDropZone.classList.remove('drag-over');
+    });
+    transitionColumnDropZone.addEventListener('drop', (e) => {
+      transitionColumnDropZone.classList.remove('drag-over');
+      const optionKey = e.dataTransfer.getData('text/option-key');
+      const columnKey = e.dataTransfer.getData('text/column-key');
+      if (optionKey) {
+        addTransitionHeaderColumn(optionKey);
+      } else if (columnKey) {
+        moveTransitionHeaderColumnToEnd(columnKey);
+      }
+    });
+
+    transitionColumnDropZone.addEventListener('dragstart', (e) => {
+      const chip = e.target.closest('.drop-tile');
+      if (!chip) return;
+      e.dataTransfer.setData('text/column-key', chip.dataset.columnKey);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    transitionColumnDropZone.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-remove-column]');
+      if (!btn) return;
+      removeTransitionHeaderColumn(btn.dataset.removeColumn);
+    });
+  }
   document.getElementById('closeTransitionDrawer').addEventListener('click', closeTransitionDrawer);
 
   transitionDrawerHandle.addEventListener('mousedown', (e) => {
@@ -2595,9 +2814,7 @@ function attachEvents() {
     const rowKey = target.dataset.rowKey;
     const colKey = target.dataset.colKey;
     if (!rowKey || !colKey) return;
-    const isCurrentStateCol = colKey.startsWith('q_');
-    const isInputCol = colKey.startsWith('in_');
-    const sanitizePattern = isCurrentStateCol || isInputCol ? /[^01]/g : /[^01X]/gi;
+    const sanitizePattern = /[^01X]/gi;
     let val = (target.value || '').toUpperCase().replace(sanitizePattern, '');
     if (val.length > 1) val = val[0];
     target.value = val;

@@ -144,18 +144,18 @@ body {
   gap: 0.5rem;
 }
 
-#verifyTransitionTable.verified::before {
-  content: '✓';
-  color: #22c55e;
-  font-weight: 700;
-  margin-right: 6px;
+#verifyTransitionTable {
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
-#verifyTransitionTable.failed::before {
-  content: '✕';
-  color: #ef4444;
-  font-weight: 700;
-  margin-right: 6px;
+#verifyTransitionTable.verified {
+  background: #22c55e;
+  color: #fff;
+}
+
+#verifyTransitionTable.failed {
+  background: #ef4444;
+  color: #fff;
 }
 
 #verifyTransitionTable:disabled {
@@ -168,6 +168,105 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.transition-builder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0;
+}
+
+.builder-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.builder-title {
+  font-weight: 700;
+  color: var(--text-subtle);
+  font-size: 0.95rem;
+}
+
+.tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 46px;
+}
+
+.tray-tile,
+.drop-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: var(--surface-alt);
+  font-weight: 700;
+  cursor: grab;
+  user-select: none;
+  transition: background 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+}
+
+.tray-tile:active,
+.drop-tile:active {
+  transform: translateY(1px);
+}
+
+.tray-tile:hover,
+.drop-tile:hover {
+  border-color: var(--accent-strong);
+}
+
+.drop-zone {
+  background: var(--surface-alt);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  min-height: 70px;
+  align-items: center;
+}
+
+.drop-zone.empty::before {
+  content: 'Drag a tile here to add a column header';
+  color: var(--text-subtle);
+  font-weight: 600;
+}
+
+.drop-zone.drag-over {
+  border-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 12%, transparent);
+}
+
+.tile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.tile-chip .remove-chip {
+  background: none;
+  border: none;
+  color: var(--text-subtle);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 0.1rem;
+}
+
+.tile-chip .remove-chip:hover {
+  color: var(--accent-strong);
 }
 
 .drawer-resize-handle {
