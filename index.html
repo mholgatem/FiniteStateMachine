@@ -84,6 +84,7 @@
     <div class="toolbar-actions">
       <button id="quickRef" class="ghost">Quick Reference</button>
       <button id="toolbarNewMachine" class="ghost">New State Machine</button>
+      <button id="kmapToggle" class="ghost">K-maps</button>
       <button id="toggleIoMode" class="ghost">Show: Binary</button>
       <button id="toggleTheme" class="ghost">Light/Dark</button>
       <button id="toggleTransitionDrawer" class="ghost">State Transition Table</button>
@@ -154,7 +155,7 @@
       <div id="paletteList"></div>
     </aside>
     <section class="playmat">
-      <div class="version-label">v1.7.2</div>
+      <div class="version-label">v1.8.0</div>
       <svg id="diagram" width="100%" height="100%">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
@@ -176,6 +177,16 @@
     </div>
     <div class="drawer-resize-handle" id="transitionDrawerHandle" aria-hidden="true"></div>
     <div class="drawer-content">
+      <div class="transition-column-builder">
+        <div class="kmap-variable-tray transition-column-tray">
+          <span class="kmap-tray-label">Column tray:</span>
+          <div id="transitionColumnTray" class="kmap-variable-items"></div>
+        </div>
+        <div class="transition-expression">
+          <div class="kmap-expression-label">Arrange columns</div>
+          <div id="transitionColumnDropzone" class="kmap-expression-tray transition-expression-tray" tabindex="0"></div>
+        </div>
+      </div>
       <div id="cellHider"></div>
       <div class="drawer-table-wrapper">
         <table id="transitionTable">
@@ -200,6 +211,53 @@
       </ul>
       <div class="dialog-actions">
         <button data-close="quickRefDialog">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="kmapWindow" class="kmap-window hidden">
+    <div class="kmap-window-header" id="kmapWindowHeader">
+      <div class="kmap-window-title">K-map Workspace</div>
+      <div class="kmap-window-actions">
+        <button id="newKmapBtn" class="primary">Create new k-map</button>
+        <button id="closeKmapWindow" aria-label="Close k-map window">✕</button>
+      </div>
+    </div>
+    <div class="kmap-window-body">
+      <div class="kmap-empty" id="kmapEmptyState">No k-maps yet. Click "Create new k-map" to get started.</div>
+      <div id="kmapList" class="kmap-list"></div>
+    </div>
+    <div class="kmap-resize-handle" id="kmapResizeHandle" aria-hidden="true"></div>
+
+    <div id="kmapCreateDialog" class="dialog-backdrop hidden">
+      <div class="dialog">
+        <h2>Create Karnaugh Map</h2>
+        <div class="form-row">
+          <label for="kmapLabel">K-map label</label>
+          <input id="kmapLabel" type="text" placeholder="F" />
+        </div>
+        <div class="form-row">
+          <label for="kmapVariables">Map Variables (2 min, 6 max, comma separated)</label>
+          <input id="kmapVariables" type="text" placeholder="A, B, C" />
+        </div>
+        <div class="form-row">
+          <label for="kmapType">Map type</label>
+          <select id="kmapType">
+            <option value="sop">SOP</option>
+            <option value="pos">POS</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="kmapDirection">Map direction</label>
+          <select id="kmapDirection">
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+          </select>
+        </div>
+        <div class="dialog-actions">
+          <button id="confirmKmapCreate" class="primary" disabled>OK</button>
+          <button data-close="kmapCreateDialog">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
