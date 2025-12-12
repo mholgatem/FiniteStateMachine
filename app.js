@@ -171,9 +171,7 @@ function diagramHasHighlightedStates() {
 function updateVerifyButtonState() {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
-  const hasErrors = diagramHasHighlightedStates();
-  verifyBtn.disabled = hasErrors;
-  if (hasErrors) setVerificationStatus(null);
+  verifyBtn.disabled = false;
 }
 
 function markDirty() {
@@ -938,7 +936,20 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
   state.transitionTable.rows.forEach((row) => {
     if (!matches) return;
     if (transitionTableRowIsBlank(row)) return;
-    const actual = readTransitionTableRowValues(row, currentStateCols, inputCols, nextStateCols, outputCols);
+    const actualRaw = readTransitionTableRowValues(
+      row,
+      currentStateCols,
+      inputCols,
+      nextStateCols,
+      outputCols,
+    );
+    const blankToZero = (arr) => arr.map((val) => (val ? val : '0'));
+    const actual = {
+      currentStateBits: blankToZero(actualRaw.currentStateBits),
+      inputBits: blankToZero(actualRaw.inputBits),
+      nextStateBits: blankToZero(actualRaw.nextStateBits),
+      outputs: blankToZero(actualRaw.outputs),
+    };
     if (actual.currentStateBits.some((v) => !v) || actual.inputBits.some((v) => !v)) {
       matches = false;
       return;
