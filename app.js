@@ -950,6 +950,47 @@ function quadraticPath(from, to, arcOffset = 0) {
   return { d: `M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`, ctrl: { x: cx, y: cy } };
 }
 
+function findStateAtPoint(pt) {
+  return state.states.find((st) => {
+    if (!st.placed) return false;
+    const dist = Math.hypot(pt.x - st.x, pt.y - st.y);
+    return dist <= st.radius;
+  });
+}
+
+function projectPointToStateBorder(st, pt) {
+  const dx = pt.x - st.x;
+  const dy = pt.y - st.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const scale = st.radius / len;
+  return {
+    x: st.x + dx * scale,
+    y: st.y + dy * scale,
+  };
+}
+
+function limitArrowPointOnTarget(fromState, targetState, cursorPoint) {
+  const dir = { x: cursorPoint.x - fromState.x, y: cursorPoint.y - fromState.y };
+  const dirLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+  const centersDistance = Math.hypot(targetState.x - fromState.x, targetState.y - fromState.y);
+  const maxLen = Math.max(0, centersDistance);
+  const clampedLen = Math.min(dirLen, maxLen);
+  let projected = {
+    x: fromState.x + (dir.x / dirLen) * clampedLen,
+    y: fromState.y + (dir.y / dirLen) * clampedLen,
+  };
+  const toTarget = { x: projected.x - targetState.x, y: projected.y - targetState.y };
+  const toTargetLen = Math.sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y) || 1;
+  if (toTargetLen < targetState.radius) {
+    const scale = targetState.radius / toTargetLen;
+    projected = {
+      x: targetState.x + toTarget.x * scale,
+      y: targetState.y + toTarget.y * scale,
+    };
+  }
+  return { ...projected, radius: 0 };
+}
+
 function selfLoopPath(node, tr) {
   const angle = tr.loopAngle !== undefined ? tr.loopAngle : -Math.PI / 2;
   const sweep = Math.PI / 1.8;
@@ -1032,13 +1073,21 @@ function drawPreview() {
   if (!currentArrow || !currentArrow.toPoint) return;
   const from = state.states.find((s) => s.id === currentArrow.from);
   if (!from) return;
-  const to = { x: currentArrow.toPoint.x, y: currentArrow.toPoint.y, radius: 0 };
-  const pathInfo = quadraticPath(from, to, currentArrow.arcOffset || 0);
+  const isSelfPreview = currentArrow.targetId === from.id;
+  const to = {
+    x: currentArrow.toPoint.x,
+    y: currentArrow.toPoint.y,
+    radius: currentArrow.toPoint.radius || 0,
+  };
+  const pathInfo = isSelfPreview
+    ? selfLoopPath(from, { loopAngle: currentArrow.loopAngle ?? -Math.PI / 2, arcOffset: 30 })
+    : quadraticPath(from, to, currentArrow.arcOffset || 0);
   if (!previewPath) {
     previewPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     previewPath.classList.add('arrow-path');
     previewPath.setAttribute('stroke-dasharray', '6 4');
   }
+  previewPath.classList.toggle('self-loop', isSelfPreview);
   previewPath.setAttribute('d', pathInfo.d);
   viewport.appendChild(previewPath);
 }
@@ -2319,6 +2368,14 @@ function deleteTransitionById(transitionId) {
 function undoLastDelete() {
   const action = undoStack.pop();
   if (!action) return;
+  if (action.type === 'transitionAddition') {
+    const idx = state.transitions.findIndex((t) => t.id === action.transitionId);
+    if (idx !== -1) state.transitions.splice(idx, 1);
+    if (selectedArrowId === action.transitionId) selectedArrowId = null;
+    renderDiagram();
+    markDirty();
+    return;
+  }
   if (action.type === 'transitionDeletion') {
     state.transitions.push(action.transition);
     selectedArrowId = action.transition.id;
@@ -3157,18 +3214,25 @@ function attachEvents() {
         const toId = parseInt(targetState.parentNode.dataset.id, 10);
         const newId = Date.now();
         const isSelfLoop = toId === currentArrow.from;
-        state.transitions.push({
+        const loopAngle = isSelfLoop
+          ? currentArrow.loopAngle !== undefined
+            ? currentArrow.loopAngle
+            : -Math.PI / 2
+          : undefined;
+        const newTransition = {
           id: newId,
           from: currentArrow.from,
           to: toId,
           inputs: '',
           outputs: '',
           arcOffset: isSelfLoop ? 30 : 0,
-          loopAngle: isSelfLoop ? -Math.PI / 2 : undefined,
+          loopAngle,
           inputValues: defaultSelections(state.inputs.length),
           outputValues: defaultSelections(state.outputs.length),
           labelT: 0.12,
-        });
+        };
+        state.transitions.push(newTransition);
+        undoStack.push({ type: 'transitionAddition', transitionId: newId });
         selectedArrowId = newId;
         renderDiagram();
         markDirty();
@@ -3246,7 +3310,23 @@ function attachEvents() {
       return;
     }
     if (currentArrow) {
-      currentArrow.toPoint = getSVGPoint(e.clientX, e.clientY);
+      const cursorPoint = getSVGPoint(e.clientX, e.clientY);
+      const hoveredState = findStateAtPoint(cursorPoint);
+      const fromState = state.states.find((s) => s.id === currentArrow.from);
+      currentArrow.targetId = null;
+      currentArrow.loopAngle = undefined;
+      if (hoveredState && fromState) {
+        if (hoveredState.id === fromState.id) {
+          currentArrow.loopAngle = Math.atan2(cursorPoint.y - hoveredState.y, cursorPoint.x - hoveredState.x);
+          currentArrow.targetId = hoveredState.id;
+          currentArrow.toPoint = { ...projectPointToStateBorder(hoveredState, cursorPoint), radius: hoveredState.radius };
+        } else {
+          currentArrow.targetId = hoveredState.id;
+          currentArrow.toPoint = limitArrowPointOnTarget(fromState, hoveredState, cursorPoint);
+        }
+      } else {
+        currentArrow.toPoint = cursorPoint;
+      }
       renderDiagram();
     }
   });
