@@ -26,6 +26,8 @@ let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
 let verifyButtonResetTimer = null;
+let dialogBackdropMouseDownTarget = null;
+let dialogBackdropCloseBlocked = false;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -3424,14 +3426,41 @@ function attachEvents() {
     if (!saveImageMenu.contains(e.target) && e.target !== saveImageDropdown) {
       saveImageMenu.classList.add('hidden');
     }
-    if (e.target.classList.contains('dialog-backdrop')) {
-      e.target.classList.add('hidden');
-    }
     if ((selectedArrowId || selectedStateId !== null) && !clickTargetsSelection(e.target)) {
       selectedArrowId = null;
       selectedStateId = null;
       renderDiagram();
     }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    const backdropHost = e.target.closest('.dialog-backdrop');
+    if (backdropHost && !e.target.classList.contains('dialog-backdrop')) {
+      dialogBackdropCloseBlocked = true;
+      dialogBackdropMouseDownTarget = null;
+      return;
+    }
+    if (e.target.classList && e.target.classList.contains('dialog-backdrop')) {
+      dialogBackdropMouseDownTarget = e.target;
+    } else {
+      dialogBackdropMouseDownTarget = null;
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (dialogBackdropCloseBlocked) {
+      dialogBackdropCloseBlocked = false;
+      dialogBackdropMouseDownTarget = null;
+      return;
+    }
+    if (
+      dialogBackdropMouseDownTarget &&
+      e.target === dialogBackdropMouseDownTarget &&
+      e.target.classList.contains('dialog-backdrop')
+    ) {
+      e.target.classList.add('hidden');
+    }
+    dialogBackdropMouseDownTarget = null;
   });
 
   document.addEventListener('mousemove', (e) => {
