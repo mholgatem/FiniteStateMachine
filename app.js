@@ -27,6 +27,7 @@ let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
 let verifyButtonResetTimer = null;
 let dialogBackdropMouseDownTarget = null;
+let dialogBackdropCloseBlocked = false;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -3433,6 +3434,12 @@ function attachEvents() {
   });
 
   document.addEventListener('mousedown', (e) => {
+    const backdropHost = e.target.closest('.dialog-backdrop');
+    if (backdropHost && !e.target.classList.contains('dialog-backdrop')) {
+      dialogBackdropCloseBlocked = true;
+      dialogBackdropMouseDownTarget = null;
+      return;
+    }
     if (e.target.classList && e.target.classList.contains('dialog-backdrop')) {
       dialogBackdropMouseDownTarget = e.target;
     } else {
@@ -3441,6 +3448,11 @@ function attachEvents() {
   });
 
   document.addEventListener('mouseup', (e) => {
+    if (dialogBackdropCloseBlocked) {
+      dialogBackdropCloseBlocked = false;
+      dialogBackdropMouseDownTarget = null;
+      return;
+    }
     if (
       dialogBackdropMouseDownTarget &&
       e.target === dialogBackdropMouseDownTarget &&
