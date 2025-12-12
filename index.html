@@ -178,14 +178,26 @@
     <div class="drawer-resize-handle" id="transitionDrawerHandle" aria-hidden="true"></div>
     <div class="drawer-content">
       <div id="cellHider"></div>
-      <div class="transition-builder">
+      <div class="builder-toolbar">
+        <div>
+          <div class="builder-title">Transition Table Builder</div>
+          <div class="builder-subtitle">Drag headers from the tray, then reorder them as needed.</div>
+        </div>
+        <button id="toggleTransitionBuilder" class="ghost">Hide Builder</button>
+      </div>
+      <div class="transition-builder" id="transitionBuilder">
         <div class="builder-section">
           <div class="builder-title">Column Tray</div>
           <div id="transitionColumnTray" class="tile-row"></div>
         </div>
         <div class="builder-section">
           <div class="builder-title">Drop headers to build your table</div>
-          <div id="transitionColumnDropZone" class="tile-row drop-zone" aria-label="Transition table columns"></div>
+          <div
+            id="transitionColumnDropZone"
+            class="tile-row drop-zone"
+            aria-label="Transition table columns"
+            tabindex="0"
+          ></div>
         </div>
       </div>
       <div class="drawer-table-wrapper">

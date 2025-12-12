@@ -28,6 +28,10 @@ let transitionTableGroupSize = 0;
 let transitionColumnOptions = [];
 let transitionColumnOptionMap = new Map();
 let verifyStatusTimeout = null;
+let selectedTransitionColumnKey = null;
+let transitionBuilderCollapsed = false;
+const dropMarker = document.createElement('div');
+dropMarker.className = 'drop-marker';
 const verifyButtonDefaultText = 'Verify Transition Table';
 
 const landing = document.getElementById('landing');
@@ -51,6 +55,8 @@ const transitionTableHead = document.getElementById('transitionTableHead');
 const transitionTableBody = document.getElementById('transitionTableBody');
 const transitionColumnTray = document.getElementById('transitionColumnTray');
 const transitionColumnDropZone = document.getElementById('transitionColumnDropZone');
+const transitionBuilder = document.getElementById('transitionBuilder');
+const toggleTransitionBuilderBtn = document.getElementById('toggleTransitionBuilder');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
@@ -456,7 +462,7 @@ function buildTransitionColumnOptions() {
     });
   });
 
-  options.push({ key: 'spacer', label: 'Spacer', type: 'spacer', role: 'spacer' });
+  options.push({ key: 'spacer', label: '', type: 'spacer', role: 'spacer' });
   return options;
 }
 
@@ -506,7 +512,7 @@ function syncHeaderColumnsWithOptions() {
     const optionKey = col.optionKey || col.key;
     if (optionKey === 'spacer') {
       const key = seenKeys.has(col.key) ? uniqueColumnKey('spacer') : col.key || uniqueColumnKey('spacer');
-      cleaned.push({ key, optionKey: 'spacer', label: 'Spacer', type: 'spacer', role: 'spacer' });
+      cleaned.push({ key, optionKey: 'spacer', label: '', type: 'spacer', role: 'spacer' });
       seenKeys.add(key);
       return;
     }
@@ -581,12 +587,16 @@ function confirmTransitionTableReset(kind) {
   return window.confirm(`Changing the number of ${kind} will reset your transition table, proceed?`);
 }
 
-function addTransitionHeaderColumn(optionKey) {
+function addTransitionHeaderColumn(optionKey, insertIndex = null) {
   const option = transitionColumnOptionMap.get(optionKey);
   if (!option) return;
   if (!state.transitionTable.headerColumns) state.transitionTable.headerColumns = [];
   const key = uniqueColumnKey(option.key);
-  state.transitionTable.headerColumns.push({
+  const insertionPoint =
+    insertIndex === null
+      ? state.transitionTable.headerColumns.length
+      : Math.max(0, Math.min(insertIndex, state.transitionTable.headerColumns.length));
+  const newColumn = {
     key,
     optionKey: option.key,
     label: option.label,
@@ -594,8 +604,10 @@ function addTransitionHeaderColumn(optionKey) {
     role: option.role,
     bitIndex: option.bitIndex,
     index: option.index,
-  });
+  };
+  state.transitionTable.headerColumns.splice(insertionPoint, 0, newColumn);
   renderTransitionTable();
+  setSelectedTransitionColumn(key);
   markDirty();
 }
 
@@ -604,18 +616,77 @@ function removeTransitionHeaderColumn(columnKey) {
   const next = state.transitionTable.headerColumns.filter((col) => col.key !== columnKey);
   if (next.length === state.transitionTable.headerColumns.length) return;
   state.transitionTable.headerColumns = next;
+  if (selectedTransitionColumnKey === columnKey) selectedTransitionColumnKey = null;
   renderTransitionTable();
   markDirty();
 }
 
-function moveTransitionHeaderColumnToEnd(columnKey) {
+function moveTransitionHeaderColumn(columnKey, targetIndex = null) {
   if (!state.transitionTable.headerColumns) return;
   const idx = state.transitionTable.headerColumns.findIndex((col) => col.key === columnKey);
   if (idx === -1) return;
   const [col] = state.transitionTable.headerColumns.splice(idx, 1);
-  state.transitionTable.headerColumns.push(col);
+  const insertionPoint =
+    targetIndex === null
+      ? state.transitionTable.headerColumns.length
+      : Math.max(0, Math.min(targetIndex, state.transitionTable.headerColumns.length));
+  state.transitionTable.headerColumns.splice(insertionPoint, 0, col);
   renderTransitionTable();
+  setSelectedTransitionColumn(col.key);
   markDirty();
+}
+
+function setSelectedTransitionColumn(columnKey) {
+  selectedTransitionColumnKey = columnKey;
+  if (!transitionColumnDropZone) return;
+  const tiles = transitionColumnDropZone.querySelectorAll('.drop-tile');
+  tiles.forEach((tile) => {
+    tile.classList.toggle('selected', tile.dataset.columnKey === selectedTransitionColumnKey);
+  });
+  if (columnKey) transitionColumnDropZone.focus();
+}
+
+function clearDropMarker() {
+  if (dropMarker.parentElement) dropMarker.parentElement.removeChild(dropMarker);
+}
+
+function showDropMarkerAt(index) {
+  if (!transitionColumnDropZone) return;
+  clearDropMarker();
+  const tiles = Array.from(transitionColumnDropZone.querySelectorAll('.drop-tile'));
+  const beforeEl = tiles[index] || null;
+  transitionColumnDropZone.insertBefore(dropMarker, beforeEl);
+}
+
+function computeDropIndex(clientX, clientY) {
+  if (!transitionColumnDropZone) return 0;
+  const tiles = Array.from(transitionColumnDropZone.querySelectorAll('.drop-tile'));
+  if (!tiles.length) return 0;
+  let bestIndex = tiles.length;
+  let bestDistance = Infinity;
+
+  tiles.forEach((tile, idx) => {
+    const rect = tile.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < bestDistance) {
+      bestDistance = dist;
+      bestIndex = clientX < centerX ? idx : idx + 1;
+    }
+  });
+
+  return Math.max(0, Math.min(bestIndex, tiles.length));
+}
+
+function setTransitionBuilderCollapsed(collapsed) {
+  transitionBuilderCollapsed = collapsed;
+  if (transitionBuilder) transitionBuilder.classList.toggle('collapsed', collapsed);
+  if (toggleTransitionBuilderBtn)
+    toggleTransitionBuilderBtn.textContent = collapsed ? 'Show Builder' : 'Hide Builder';
+  if (collapsed) clearDropMarker();
 }
 
 function renderTransitionColumnBuilder() {
@@ -624,9 +695,12 @@ function renderTransitionColumnBuilder() {
   transitionColumnOptions.forEach((opt) => {
     const tile = document.createElement('div');
     tile.className = 'tray-tile';
+    if (opt.type === 'spacer') tile.classList.add('spacer-tile');
+    tile.classList.add(opt.type === 'spacer' ? 'spacer' : 'value');
     tile.draggable = true;
     tile.dataset.optionKey = opt.key;
-    tile.innerHTML = formatScriptedText(opt.label);
+    tile.innerHTML = opt.type === 'spacer' ? '&nbsp;' : formatScriptedText(opt.label);
+    if (opt.type === 'spacer') tile.setAttribute('aria-label', 'Spacer');
     transitionColumnTray.appendChild(tile);
   });
 
@@ -641,18 +715,15 @@ function renderTransitionColumnBuilder() {
   columns.forEach((col) => {
     const chip = document.createElement('div');
     chip.className = 'tile-chip drop-tile';
+    chip.classList.add(col.type === 'spacer' ? 'spacer-tile' : 'value');
+    if (col.key === selectedTransitionColumnKey) chip.classList.add('selected');
     chip.draggable = true;
     chip.dataset.columnKey = col.key;
     chip.dataset.optionKey = col.optionKey;
     const label = document.createElement('span');
-    label.innerHTML = formatScriptedText(col.label);
+    label.innerHTML = col.type === 'spacer' ? '&nbsp;' : formatScriptedText(col.label);
     chip.appendChild(label);
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'remove-chip';
-    removeBtn.type = 'button';
-    removeBtn.dataset.removeColumn = col.key;
-    removeBtn.textContent = '✕';
-    chip.appendChild(removeBtn);
+    if (col.type === 'spacer') chip.setAttribute('aria-label', 'Spacer');
     transitionColumnDropZone.appendChild(chip);
   });
 }
@@ -2601,6 +2672,13 @@ function attachEvents() {
     .getElementById('verifyTransitionTable')
     .addEventListener('click', verifyTransitionTableAgainstDiagram);
 
+  if (toggleTransitionBuilderBtn) {
+    toggleTransitionBuilderBtn.addEventListener('click', () => {
+      setTransitionBuilderCollapsed(!transitionBuilderCollapsed);
+    });
+    setTransitionBuilderCollapsed(false);
+  }
+
   if (transitionColumnTray) {
     transitionColumnTray.addEventListener('dragstart', (e) => {
       const tile = e.target.closest('.tray-tile');
@@ -2616,20 +2694,25 @@ function attachEvents() {
       if (types.includes('text/option-key') || types.includes('text/column-key')) {
         e.preventDefault();
         transitionColumnDropZone.classList.add('drag-over');
-        e.dataTransfer.dropEffect = 'copy';
+        const dropIndex = computeDropIndex(e.clientX, e.clientY);
+        showDropMarkerAt(dropIndex);
+        e.dataTransfer.dropEffect = types.includes('text/column-key') ? 'move' : 'copy';
       }
     });
     transitionColumnDropZone.addEventListener('dragleave', () => {
       transitionColumnDropZone.classList.remove('drag-over');
+      clearDropMarker();
     });
     transitionColumnDropZone.addEventListener('drop', (e) => {
       transitionColumnDropZone.classList.remove('drag-over');
+      const dropIndex = computeDropIndex(e.clientX, e.clientY);
       const optionKey = e.dataTransfer.getData('text/option-key');
       const columnKey = e.dataTransfer.getData('text/column-key');
+      clearDropMarker();
       if (optionKey) {
-        addTransitionHeaderColumn(optionKey);
+        addTransitionHeaderColumn(optionKey, dropIndex);
       } else if (columnKey) {
-        moveTransitionHeaderColumnToEnd(columnKey);
+        moveTransitionHeaderColumn(columnKey, dropIndex);
       }
     });
 
@@ -2641,9 +2724,21 @@ function attachEvents() {
     });
 
     transitionColumnDropZone.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-remove-column]');
-      if (!btn) return;
-      removeTransitionHeaderColumn(btn.dataset.removeColumn);
+      const chip = e.target.closest('.drop-tile');
+      if (!chip) return;
+      const colKey = chip.dataset.columnKey;
+      setSelectedTransitionColumn(colKey === selectedTransitionColumnKey ? null : colKey);
+    });
+
+    transitionColumnDropZone.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (selectedTransitionColumnKey) {
+          removeTransitionHeaderColumn(selectedTransitionColumnKey);
+          e.preventDefault();
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedTransitionColumn(null);
+      }
     });
   }
   document.getElementById('closeTransitionDrawer').addEventListener('click', closeTransitionDrawer);
