@@ -177,6 +177,22 @@
     </div>
     <div class="drawer-resize-handle" id="transitionDrawerHandle" aria-hidden="true"></div>
     <div class="drawer-content">
+      <div class="transition-column-builder" id="transitionColumnBuilder">
+        <div class="transition-builder-header">
+          <div class="transition-builder-title">Column builder</div>
+          <button id="toggleTransitionBuilder" class="ghost" aria-expanded="true">Hide builder</button>
+        </div>
+        <div class="transition-builder-body">
+          <div class="kmap-variable-tray transition-column-tray">
+            <span class="kmap-tray-label">Column tray:</span>
+            <div id="transitionColumnTray" class="kmap-variable-items"></div>
+          </div>
+          <div class="transition-expression">
+            <div class="kmap-expression-label">Arrange columns</div>
+            <div id="transitionColumnDropzone" class="kmap-expression-tray transition-expression-tray" tabindex="0"></div>
+          </div>
+        </div>
+      </div>
       <div id="cellHider"></div>
       <div class="drawer-table-wrapper">
         <table id="transitionTable">

@@ -25,6 +25,7 @@ let isPanning = false;
 let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
+let verifyButtonResetTimer = null;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -45,6 +46,8 @@ const outputChoices = document.getElementById('outputChoices');
 const transitionDrawer = document.getElementById('transitionDrawer');
 const transitionTableHead = document.getElementById('transitionTableHead');
 const transitionTableBody = document.getElementById('transitionTableBody');
+const transitionColumnTray = document.getElementById('transitionColumnTray');
+const transitionColumnDropzone = document.getElementById('transitionColumnDropzone');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
@@ -59,10 +62,13 @@ const kmapVariablesInput = document.getElementById('kmapVariables');
 const kmapTypeInput = document.getElementById('kmapType');
 const kmapDirectionInput = document.getElementById('kmapDirection');
 const kmapResizeHandle = document.getElementById('kmapResizeHandle');
+const transitionColumnBuilder = document.getElementById('transitionColumnBuilder');
+const toggleTransitionBuilderBtn = document.getElementById('toggleTransitionBuilder');
 
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
 let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
 let kmapExpressionDragState = null;
+let transitionColumnDragState = null;
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 
 function coerceAllowedStateCount(value) {
@@ -94,28 +100,61 @@ function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
+function columnBaseKey(col) {
+  if (!col) return '';
+  if (col.baseKey) return col.baseKey;
+  const key = col.key || '';
+  const [base] = key.split('__');
+  return base || key;
+}
+
+function uniqueId(prefix = 'id') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
 function clearVerificationStatus() {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (verifyBtn) {
+    if (verifyButtonResetTimer) {
+      clearTimeout(verifyButtonResetTimer);
+      verifyButtonResetTimer = null;
+    }
     verifyBtn.classList.remove('verified', 'failed');
     verifyBtn.removeAttribute('title');
+    if (verifyBtn.dataset.baseLabel) verifyBtn.textContent = verifyBtn.dataset.baseLabel;
   }
 }
 
 function setVerificationStatus(passed) {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
+  const baseLabel = verifyBtn.dataset.baseLabel || verifyBtn.textContent || 'Verify Transition Table';
+  verifyBtn.dataset.baseLabel = baseLabel;
+  verifyBtn.textContent = baseLabel;
   verifyBtn.classList.remove('verified', 'failed');
+  verifyBtn.removeAttribute('title');
+  if (verifyButtonResetTimer) {
+    clearTimeout(verifyButtonResetTimer);
+    verifyButtonResetTimer = null;
+  }
+
   if (passed === true) {
     verifyBtn.classList.add('verified');
+    verifyBtn.textContent = 'Transition table verified';
     verifyBtn.title = 'Your transition table matches your transition diagram';
     state.transitionTableVerified = true;
     return;
   }
   if (passed === false) {
     verifyBtn.classList.add('failed');
+    verifyBtn.textContent = "Table & diagram don't match";
     verifyBtn.title = 'Your transition table DOES NOT match your transition diagram';
     state.transitionTableVerified = false;
+    verifyButtonResetTimer = setTimeout(() => {
+      verifyBtn.classList.remove('failed');
+      verifyBtn.textContent = baseLabel;
+      verifyBtn.removeAttribute('title');
+    }, 2000);
     return;
   }
   state.transitionTableVerified = false;
@@ -405,45 +444,106 @@ function generateInputCombos(count) {
   return combos;
 }
 
+function buildTransitionColumnTemplates() {
+  const bitCount = stateBitCount();
+  const templates = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    templates.push({ key: `q_${i}`, baseKey: `q_${i}`, label: `Q_${i}`, type: 'value' });
+  }
+  const nextStateTemplates = [];
+  for (let i = bitCount - 1; i >= 0; i -= 1) {
+    nextStateTemplates.push({
+      key: `next_q_${i}`,
+      baseKey: `next_q_${i}`,
+      label: `Q_${i}^+`,
+      type: 'value',
+    });
+  }
+  const inputTemplates = state.inputs.map((name, idx) => ({
+    key: `in_${idx}`,
+    baseKey: `in_${idx}`,
+    label: name || `Input ${idx + 1}`,
+    type: 'value',
+  }));
+  const outputTemplates = state.outputs.map((name, idx) => ({
+    key: `out_${idx}`,
+    baseKey: `out_${idx}`,
+    label: name || `Output ${idx + 1}`,
+    type: 'value',
+  }));
+  templates.push(...nextStateTemplates, ...inputTemplates, ...outputTemplates);
+  templates.push({ key: 'spacer', baseKey: 'spacer', label: '', type: 'spacer', allowMultiple: true });
+  return templates;
+}
+
+function createSpacerColumn() {
+  return {
+    key: `spacer_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    baseKey: 'spacer',
+    label: '',
+    type: 'spacer',
+  };
+}
+
+function createColumnInstance(template) {
+  const baseKey = columnBaseKey(template);
+  const key = `${baseKey}__${uniqueId('col')}`;
+  return { ...template, key, baseKey };
+}
+
+function buildDefaultTransitionColumns(templates) {
+  const find = (predicate) => templates.filter(predicate);
+  const columns = [];
+  const currentStates = find((t) => t.key.startsWith('q_'));
+  const nextStates = find((t) => t.key.startsWith('next_q_'));
+  const inputs = find((t) => t.key.startsWith('in_'));
+  const outputs = find((t) => t.key.startsWith('out_'));
+
+  const addSpacer = () => columns.push(createSpacerColumn());
+  addSpacer();
+  currentStates.forEach((t) => columns.push(createColumnInstance(t)));
+  addSpacer();
+  nextStates.forEach((t) => columns.push(createColumnInstance(t)));
+  if (inputs.length) addSpacer();
+  inputs.forEach((t) => columns.push(createColumnInstance(t)));
+  if (outputs.length) addSpacer();
+  outputs.forEach((t) => columns.push(createColumnInstance(t)));
+  return columns;
+}
+
 function ensureTransitionTableStructure() {
   if (!state.transitionTable || typeof state.transitionTable !== 'object') {
     state.transitionTable = { cells: {} };
   }
   if (!state.transitionTable.cells) state.transitionTable.cells = {};
 
-  const bitCount = stateBitCount();
-  const stateBitCols = [];
-  for (let i = bitCount - 1; i >= 0; i -= 1) {
-    stateBitCols.push({ key: `q_${i}`, label: `Q_${i}`, type: 'value' });
+  if (!Array.isArray(state.transitionTable.columns)) state.transitionTable.columns = [];
+
+  const templates = buildTransitionColumnTemplates();
+  state.transitionTable.availableColumns = templates;
+  const templateMap = new Map(templates.map((tpl) => [tpl.key, tpl]));
+  state.transitionTable.columns = state.transitionTable.columns
+    .map((col) => {
+      if (col.type === 'spacer') return col;
+      const baseKey = columnBaseKey(col);
+      const template = templateMap.get(baseKey);
+      if (!template) return null;
+      const key = (col.key && col.key.startsWith(baseKey)) ? col.key : `${baseKey}__${uniqueId('col')}`;
+      return {
+        ...template,
+        ...col,
+        baseKey,
+        key,
+        label: col.label || template.label,
+        type: template.type,
+      };
+    })
+    .filter(Boolean);
+  if (!state.transitionTable.columns.length) {
+    state.transitionTable.columns = buildDefaultTransitionColumns(templates);
   }
 
-  const nextStateBitCols = [];
-  for (let i = bitCount - 1; i >= 0; i -= 1) {
-    nextStateBitCols.push({ key: `next_q_${i}`, label: `Q_${i}^+`, type: 'value' });
-  }
-
-  const inputCols = state.inputs.map((name, idx) => ({
-    key: `in_${idx}`,
-    label: name || `Input ${idx + 1}`,
-    type: 'value',
-  }));
-  const outputCols = state.outputs.map((name, idx) => ({
-    key: `out_${idx}`,
-    label: name || `Output ${idx + 1}`,
-    type: 'value',
-  }));
-
-  const columns = [
-    { key: 'row_index', label: '#', type: 'rowIndex' },
-    { key: 'spacer_0', label: '', type: 'spacer' },
-    ...stateBitCols,
-    { key: 'spacer_state_inputs', label: '', type: 'spacer' },
-    ...inputCols,
-    { key: 'spacer_1', label: '', type: 'spacer' },
-    ...nextStateBitCols,
-    { key: 'spacer_2', label: '', type: 'spacer' },
-    ...outputCols,
-  ];
+  const columns = [{ key: 'row_index', label: '#', type: 'rowIndex' }, ...state.transitionTable.columns];
 
   transitionTableValueColumns = columns.filter((col) => col.type === 'value');
 
@@ -468,7 +568,6 @@ function ensureTransitionTableStructure() {
     if (state.transitionTable.cells[key] === undefined) state.transitionTable.cells[key] = '';
   });
 
-  state.transitionTable.columns = columns;
   state.transitionTable.rows = rows;
   state.transitionTable.valueColumns = transitionTableValueColumns;
   state.transitionTable.groupSize = transitionTableGroupSize;
@@ -484,18 +583,74 @@ function confirmTransitionTableReset(kind) {
   return window.confirm(`Changing the number of ${kind} will reset your transition table, proceed?`);
 }
 
+function renderTransitionColumnTray() {
+  if (!transitionColumnTray) return;
+  transitionColumnTray.innerHTML = '';
+  const templates = state.transitionTable?.availableColumns || buildTransitionColumnTemplates();
+  templates.forEach((tpl) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'kmap-token transition-token';
+    btn.draggable = true;
+    btn.dataset.tokenType = tpl.type;
+    btn.dataset.tokenValue = tpl.key;
+    if (tpl.type === 'spacer') btn.classList.add('transition-spacer');
+    btn.innerHTML = tpl.label ? formatScriptedText(tpl.label) : '&nbsp;';
+    transitionColumnTray.appendChild(btn);
+  });
+}
+
+function renderTransitionColumnToken(col, index) {
+  const el = document.createElement('div');
+  el.className = 'kmap-expr-token transition-column-token';
+  el.draggable = true;
+  el.dataset.tokenType = col.type;
+  el.dataset.tokenValue = col.key;
+  el.dataset.index = index;
+  const inner = document.createElement('span');
+  inner.className = 'kmap-expr-token-inner';
+  if (col.type === 'spacer') {
+    el.classList.add('transition-spacer-token');
+    inner.innerHTML = '&nbsp;';
+  } else {
+    inner.innerHTML = formatScriptedText(col.label || '');
+  }
+  el.appendChild(inner);
+  return el;
+}
+
+function renderTransitionColumnSelection() {
+  if (!transitionColumnDropzone) return;
+  transitionColumnDropzone.innerHTML = '';
+  const columns = state.transitionTable?.columns || [];
+  if (!columns.length) {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'kmap-expr-placeholder';
+    placeholder.textContent = 'Drag columns here to build the table';
+    transitionColumnDropzone.appendChild(placeholder);
+    return;
+  }
+  columns.forEach((col, idx) => {
+    transitionColumnDropzone.appendChild(renderTransitionColumnToken(col, idx));
+  });
+}
+
 function renderTransitionTable() {
   ensureTransitionTableStructure();
+  renderTransitionColumnTray();
+  renderTransitionColumnSelection();
   transitionTableHead.innerHTML = '';
   transitionTableBody.innerHTML = '';
+
+  const columns = [{ key: 'row_index', label: '#', type: 'rowIndex' }, ...(state.transitionTable.columns || [])];
 
   const headerRow = document.createElement('tr');
   const valueIndexMap = new Map(
     transitionTableValueColumns.map((col, idx) => [col.key, idx]),
   );
-  state.transitionTable.columns.forEach((col) => {
+  columns.forEach((col) => {
     const th = document.createElement('th');
-    th.innerHTML = formatScriptedText(col.label);
+    th.innerHTML = formatScriptedText(col.label || '');
     if (col.type === 'spacer') th.classList.add('col-spacer');
     if (col.type === 'rowIndex') th.classList.add('row-index-cell');
     headerRow.appendChild(th);
@@ -506,7 +661,7 @@ function renderTransitionTable() {
     const tr = document.createElement('tr');
     tr.dataset.rowIndex = rowIdx;
 
-    state.transitionTable.columns.forEach((col) => {
+    columns.forEach((col) => {
       const td = document.createElement('td');
       if (col.type === 'spacer') {
         td.classList.add('col-spacer');
@@ -530,21 +685,21 @@ function renderTransitionTable() {
       tr.appendChild(td);
     });
 
-    transitionTableBody.appendChild(tr);
+      transitionTableBody.appendChild(tr);
 
-    if (
-      transitionTableGroupSize > 0 &&
-      (rowIdx + 1) % transitionTableGroupSize === 0 &&
-      rowIdx < state.transitionTable.rows.length - 1
-    ) {
-      const spacerRow = document.createElement('tr');
-      spacerRow.classList.add('row-spacer');
-      const spacerCell = document.createElement('td');
-      spacerCell.colSpan = state.transitionTable.columns.length;
-      spacerRow.appendChild(spacerCell);
-      transitionTableBody.appendChild(spacerRow);
-    }
-  });
+      if (
+        transitionTableGroupSize > 0 &&
+        (rowIdx + 1) % transitionTableGroupSize === 0 &&
+        rowIdx < state.transitionTable.rows.length - 1
+      ) {
+        const spacerRow = document.createElement('tr');
+        spacerRow.classList.add('row-spacer');
+        const spacerCell = document.createElement('td');
+        spacerCell.colSpan = columns.length;
+        spacerRow.appendChild(spacerCell);
+        transitionTableBody.appendChild(spacerRow);
+      }
+    });
 
   updateVerifyButtonState();
 }
@@ -775,10 +930,10 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
   ensureTransitionTableStructure();
   const { expectations, conflict } = buildDiagramExpectations();
 
-  const currentStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('q_'));
-  const inputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('in_'));
-  const nextStateCols = transitionTableValueColumns.filter((col) => col.key.startsWith('next_q_'));
-  const outputCols = transitionTableValueColumns.filter((col) => col.key.startsWith('out_'));
+  const currentStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('q_'));
+  const inputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('in_'));
+  const nextStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('next_q_'));
+  const outputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('out_'));
   const bitCount = currentStateCols.length;
 
   let matches = !conflict;
@@ -817,9 +972,6 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
     setVerificationStatus(true);
     if (recordStatus) unsavedChanges = true;
   } else {
-    if (!silent) {
-      window.alert('Your state transition table does not match your state transition diagram');
-    }
     setVerificationStatus(false);
     if (recordStatus) unsavedChanges = true;
   }
@@ -2324,6 +2476,13 @@ function attachEvents() {
   );
   toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
+  if (toggleTransitionBuilderBtn && transitionColumnBuilder) {
+    toggleTransitionBuilderBtn.addEventListener('click', () => {
+      const collapsed = transitionColumnBuilder.classList.toggle('collapsed');
+      toggleTransitionBuilderBtn.textContent = collapsed ? 'Show builder' : 'Hide builder';
+      toggleTransitionBuilderBtn.setAttribute('aria-expanded', (!collapsed).toString());
+    });
+  }
   document.getElementById('kmapToggle').addEventListener('click', () => {
     if (kmapWindow.classList.contains('hidden')) showKmapWorkspace();
     else closeKmapWindow();
@@ -2639,6 +2798,122 @@ function attachEvents() {
       e.preventDefault();
     }
   });
+
+  transitionDrawer.addEventListener('dragstart', (e) => {
+    const token = e.target.closest('.transition-token, .transition-column-token');
+    if (!token) return;
+    const type = token.dataset.tokenType;
+    const value = token.dataset.tokenValue;
+    const fromIndex = token.classList.contains('transition-column-token')
+      ? parseInt(token.dataset.index, 10)
+      : null;
+    transitionColumnDragState = {
+      source: token.classList.contains('transition-column-token') ? 'selection' : 'tray',
+      type,
+      value,
+      fromIndex,
+    };
+    e.dataTransfer.setData('text/plain', `${type}:${value}`);
+  });
+
+  transitionDrawer.addEventListener('dragover', (e) => {
+    const tray = e.target.closest('#transitionColumnDropzone');
+    if (!tray) return;
+    e.preventDefault();
+    const marker = ensureDropMarker(tray);
+    const targetToken = e.target.closest('.transition-column-token');
+    if (targetToken && targetToken.parentNode === tray) {
+      const rect = targetToken.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      tray.insertBefore(marker, before ? targetToken : targetToken.nextSibling);
+    } else if (!marker.parentNode) {
+      tray.appendChild(marker);
+    }
+    const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = sequence.indexOf(marker);
+    marker.dataset.index = markerIndex === -1 ? sequence.length : markerIndex;
+  });
+
+  transitionDrawer.addEventListener('dragleave', (e) => {
+    const tray = e.target.closest('#transitionColumnDropzone');
+    if (tray && !tray.contains(e.relatedTarget)) {
+      clearDropMarker(tray);
+    }
+  });
+
+  transitionDrawer.addEventListener('drop', (e) => {
+    const tray = e.target.closest('#transitionColumnDropzone');
+    if (!tray) return;
+    e.preventDefault();
+    const marker = tray.querySelector('.kmap-drop-marker');
+    const payload = transitionColumnDragState;
+    transitionColumnDragState = null;
+    if (!payload || !payload.type) return;
+
+    const sequence = [...tray.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = marker ? sequence.indexOf(marker) : -1;
+    let index = markerIndex === -1 ? sequence.filter((el) => el.classList.contains('kmap-expr-token')).length : markerIndex;
+    clearDropMarker(tray);
+
+    const columns = [...(state.transitionTable.columns || [])];
+    const templates = state.transitionTable?.availableColumns || buildTransitionColumnTemplates();
+
+    if (payload.source === 'selection' && !Number.isNaN(payload.fromIndex)) {
+      if (payload.fromIndex >= 0 && payload.fromIndex < columns.length) {
+        const [moved] = columns.splice(payload.fromIndex, 1);
+        if (index > payload.fromIndex) index -= 1;
+        columns.splice(Math.max(0, Math.min(columns.length, index)), 0, moved);
+      }
+    } else if (payload.source === 'tray') {
+      const template =
+        templates.find((tpl) => tpl.key === payload.value && tpl.type === payload.type) ||
+        (payload.type === 'spacer' ? { key: 'spacer', label: '', type: 'spacer', allowMultiple: true } : null);
+      if (!template) return;
+      if (template.type === 'spacer') {
+        columns.splice(Math.max(0, Math.min(columns.length, index)), 0, createSpacerColumn());
+      } else {
+        columns.splice(
+          Math.max(0, Math.min(columns.length, index)),
+          0,
+          createColumnInstance(template),
+        );
+      }
+    }
+
+    state.transitionTable.columns = columns;
+    renderTransitionTable();
+    markDirty();
+  });
+
+  transitionDrawer.addEventListener('dragend', () => {
+    document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
+    transitionColumnDragState = null;
+  });
+
+  if (transitionColumnDropzone) {
+    transitionColumnDropzone.addEventListener('click', (e) => {
+      transitionColumnDropzone.focus();
+      const token = e.target.closest('.transition-column-token');
+      transitionColumnDropzone
+        .querySelectorAll('.transition-column-token.selected')
+        .forEach((el) => el.classList.remove('selected'));
+      if (token) token.classList.add('selected');
+    });
+
+    transitionColumnDropzone.addEventListener('keydown', (e) => {
+      if (!['Backspace', 'Delete'].includes(e.key)) return;
+      const selected = transitionColumnDropzone.querySelector('.transition-column-token.selected');
+      if (!selected) return;
+      const idx = parseInt(selected.dataset.index, 10);
+      if (Number.isNaN(idx)) return;
+      const columns = [...(state.transitionTable.columns || [])];
+      columns.splice(idx, 1);
+      state.transitionTable.columns = columns;
+      renderTransitionTable();
+      markDirty();
+      e.preventDefault();
+    });
+  }
 
   kmapList.addEventListener('input', (e) => {
     const target = e.target;
