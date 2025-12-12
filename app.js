@@ -953,7 +953,6 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
 
   if (missingHeaders.length) {
     const reason = `Missing required column headers: ${missingHeaders.join(', ')}`;
-    if (!silent) window.alert(reason);
     setVerificationStatus(false, reason);
     if (recordStatus) unsavedChanges = true;
     return;
