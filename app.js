@@ -648,6 +648,7 @@ function setSelectedTransitionColumn(columnKey) {
 
 function clearDropMarker() {
   if (dropMarker.parentElement) dropMarker.parentElement.removeChild(dropMarker);
+  delete dropMarker.dataset.index;
 }
 
 function showDropMarkerAt(index) {
@@ -2684,6 +2685,7 @@ function attachEvents() {
       const tile = e.target.closest('.tray-tile');
       if (!tile) return;
       e.dataTransfer.setData('text/option-key', tile.dataset.optionKey);
+      e.dataTransfer.setData('text/plain', `option:${tile.dataset.optionKey}`);
       e.dataTransfer.effectAllowed = 'copy';
     });
   }
@@ -2691,23 +2693,50 @@ function attachEvents() {
   if (transitionColumnDropZone) {
     transitionColumnDropZone.addEventListener('dragover', (e) => {
       const types = Array.from(e.dataTransfer.types || []);
-      if (types.includes('text/option-key') || types.includes('text/column-key')) {
-        e.preventDefault();
-        transitionColumnDropZone.classList.add('drag-over');
-        const dropIndex = computeDropIndex(e.clientX, e.clientY);
-        showDropMarkerAt(dropIndex);
-        e.dataTransfer.dropEffect = types.includes('text/column-key') ? 'move' : 'copy';
+      const plain = e.dataTransfer.getData('text/plain');
+      const isColumn = types.includes('text/column-key') || plain.startsWith('column:');
+      const isOption = types.includes('text/option-key') || plain.startsWith('option:');
+      if (!isColumn && !isOption) return;
+
+      e.preventDefault();
+      transitionColumnDropZone.classList.add('drag-over');
+
+      const targetTile = e.target.closest('.drop-tile');
+      const tiles = Array.from(transitionColumnDropZone.querySelectorAll('.drop-tile'));
+      if (targetTile && transitionColumnDropZone.contains(targetTile)) {
+        const rect = targetTile.getBoundingClientRect();
+        const before = e.clientX < rect.left + rect.width / 2;
+        transitionColumnDropZone.insertBefore(
+          dropMarker,
+          before ? targetTile : targetTile.nextSibling,
+        );
+      } else if (!dropMarker.parentNode) {
+        transitionColumnDropZone.appendChild(dropMarker);
       }
+
+      const sequence = Array.from(
+        transitionColumnDropZone.querySelectorAll('.drop-tile, .drop-marker'),
+      );
+      const markerIndex = sequence.indexOf(dropMarker);
+      dropMarker.dataset.index = markerIndex === -1 ? tiles.length : markerIndex;
+      e.dataTransfer.dropEffect = isColumn ? 'move' : 'copy';
     });
-    transitionColumnDropZone.addEventListener('dragleave', () => {
-      transitionColumnDropZone.classList.remove('drag-over');
-      clearDropMarker();
+    transitionColumnDropZone.addEventListener('dragleave', (e) => {
+      if (!transitionColumnDropZone.contains(e.relatedTarget)) {
+        transitionColumnDropZone.classList.remove('drag-over');
+        clearDropMarker();
+      }
     });
     transitionColumnDropZone.addEventListener('drop', (e) => {
       transitionColumnDropZone.classList.remove('drag-over');
-      const dropIndex = computeDropIndex(e.clientX, e.clientY);
-      const optionKey = e.dataTransfer.getData('text/option-key');
-      const columnKey = e.dataTransfer.getData('text/column-key');
+      const markerIdx = parseInt(dropMarker.dataset.index || '0', 10);
+      const fallbackIndex = computeDropIndex(e.clientX, e.clientY);
+      const dropIndex = Number.isNaN(markerIdx) ? fallbackIndex : markerIdx;
+      const plain = e.dataTransfer.getData('text/plain');
+      const optionKey =
+        e.dataTransfer.getData('text/option-key') || plain.replace(/^option:/, '');
+      const columnKey =
+        e.dataTransfer.getData('text/column-key') || plain.replace(/^column:/, '');
       clearDropMarker();
       if (optionKey) {
         addTransitionHeaderColumn(optionKey, dropIndex);
@@ -2720,7 +2749,13 @@ function attachEvents() {
       const chip = e.target.closest('.drop-tile');
       if (!chip) return;
       e.dataTransfer.setData('text/column-key', chip.dataset.columnKey);
+      e.dataTransfer.setData('text/plain', `column:${chip.dataset.columnKey}`);
       e.dataTransfer.effectAllowed = 'move';
+    });
+
+    transitionColumnDropZone.addEventListener('dragend', () => {
+      clearDropMarker();
+      transitionColumnDropZone.classList.remove('drag-over');
     });
 
     transitionColumnDropZone.addEventListener('click', (e) => {
