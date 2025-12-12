@@ -26,6 +26,7 @@ let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
 let verifyButtonResetTimer = null;
+let dialogBackdropMouseDownTarget = null;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -3424,14 +3425,30 @@ function attachEvents() {
     if (!saveImageMenu.contains(e.target) && e.target !== saveImageDropdown) {
       saveImageMenu.classList.add('hidden');
     }
-    if (e.target.classList.contains('dialog-backdrop')) {
-      e.target.classList.add('hidden');
-    }
     if ((selectedArrowId || selectedStateId !== null) && !clickTargetsSelection(e.target)) {
       selectedArrowId = null;
       selectedStateId = null;
       renderDiagram();
     }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.target.classList && e.target.classList.contains('dialog-backdrop')) {
+      dialogBackdropMouseDownTarget = e.target;
+    } else {
+      dialogBackdropMouseDownTarget = null;
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (
+      dialogBackdropMouseDownTarget &&
+      e.target === dialogBackdropMouseDownTarget &&
+      e.target.classList.contains('dialog-backdrop')
+    ) {
+      e.target.classList.add('hidden');
+    }
+    dialogBackdropMouseDownTarget = null;
   });
 
   document.addEventListener('mousemove', (e) => {
