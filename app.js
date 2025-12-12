@@ -626,10 +626,11 @@ function moveTransitionHeaderColumn(columnKey, targetIndex = null) {
   const idx = state.transitionTable.headerColumns.findIndex((col) => col.key === columnKey);
   if (idx === -1) return;
   const [col] = state.transitionTable.headerColumns.splice(idx, 1);
-  const insertionPoint =
+  const normalizedIndex =
     targetIndex === null
       ? state.transitionTable.headerColumns.length
       : Math.max(0, Math.min(targetIndex, state.transitionTable.headerColumns.length));
+  const insertionPoint = normalizedIndex > idx ? normalizedIndex - 1 : normalizedIndex;
   state.transitionTable.headerColumns.splice(insertionPoint, 0, col);
   renderTransitionTable();
   setSelectedTransitionColumn(col.key);
@@ -2693,7 +2694,7 @@ function attachEvents() {
   if (transitionColumnDropZone) {
     transitionColumnDropZone.addEventListener('dragover', (e) => {
       const types = Array.from(e.dataTransfer.types || []);
-      const plain = e.dataTransfer.getData('text/plain');
+      const plain = e.dataTransfer.getData('text/plain') || '';
       const isColumn = types.includes('text/column-key') || plain.startsWith('column:');
       const isOption = types.includes('text/option-key') || plain.startsWith('option:');
       if (!isColumn && !isOption) return;
@@ -2728,20 +2729,21 @@ function attachEvents() {
       }
     });
     transitionColumnDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
       transitionColumnDropZone.classList.remove('drag-over');
       const markerIdx = parseInt(dropMarker.dataset.index || '0', 10);
       const fallbackIndex = computeDropIndex(e.clientX, e.clientY);
       const dropIndex = Number.isNaN(markerIdx) ? fallbackIndex : markerIdx;
-      const plain = e.dataTransfer.getData('text/plain');
-      const optionKey =
-        e.dataTransfer.getData('text/option-key') || plain.replace(/^option:/, '');
-      const columnKey =
-        e.dataTransfer.getData('text/column-key') || plain.replace(/^column:/, '');
+      const plain = e.dataTransfer.getData('text/plain') || '';
+      let optionKey = e.dataTransfer.getData('text/option-key');
+      let columnKey = e.dataTransfer.getData('text/column-key');
+      if (!optionKey && plain.startsWith('option:')) optionKey = plain.slice('option:'.length);
+      if (!columnKey && plain.startsWith('column:')) columnKey = plain.slice('column:'.length);
       clearDropMarker();
-      if (optionKey) {
-        addTransitionHeaderColumn(optionKey, dropIndex);
-      } else if (columnKey) {
+      if (columnKey) {
         moveTransitionHeaderColumn(columnKey, dropIndex);
+      } else if (optionKey) {
+        addTransitionHeaderColumn(optionKey, dropIndex);
       }
     });
 
