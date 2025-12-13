@@ -84,11 +84,26 @@
     </div>
     <div class="toolbar-actions">
       <button id="quickRef" class="ghost">Quick Reference</button>
-      <button id="toolbarNewMachine" class="ghost">New State Machine</button>
+      <div class="dropdown">
+        <button id="fileMenuButton" class="ghost dropdown-toggle">File ▾</button>
+        <div id="fileMenu" class="dropdown-menu hidden">
+          <button id="toolbarNewMachine" class="ghost" type="button">New State Machine</button>
+          <label class="file-label">
+            <input type="file" id="loadButton" accept="application/json" hidden />
+            <span>Load</span>
+          </label>
+          <button id="saveButton" class="primary" type="button">Save State Machine</button>
+        </div>
+      </div>
       <button id="kmapToggle" class="ghost">K-maps</button>
       <button id="testKmapBtn" class="ghost">TEST KMAP</button>
-      <button id="toggleIoMode" class="ghost">Show: Binary</button>
-      <button id="toggleTheme" class="ghost">Light/Dark</button>
+      <div class="dropdown">
+        <button id="settingsMenuButton" class="ghost dropdown-toggle">Settings ▾</button>
+        <div id="settingsMenu" class="dropdown-menu hidden">
+          <button id="toggleIoMode" class="ghost" type="button">Show: Binary</button>
+          <button id="toggleTheme" class="ghost" type="button">Light/Dark</button>
+        </div>
+      </div>
       <button id="toggleTransitionDrawer" class="ghost">State Transition Table</button>
       <div class="dropdown">
         <button id="saveImageDropdown" class="ghost dropdown-toggle">Save Image ▾</button>
@@ -99,11 +114,6 @@
           <button id="saveImageKmaps" type="button">Karnaugh Maps (ZIP)</button>
         </div>
       </div>
-      <label class="file-label">
-        <input type="file" id="loadButton" accept="application/json" hidden />
-        <span>Load</span>
-      </label>
-      <button id="saveButton" class="primary">Download Save</button>
     </div>
   </header>
 

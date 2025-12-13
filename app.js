@@ -22,6 +22,7 @@ let viewState = { scale: 1, panX: 0, panY: 0 };
 let unsavedChanges = false;
 let drawerWidth = 520;
 let isPanning = false;
+let panWithShift = false;
 let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
@@ -52,6 +53,10 @@ const transitionColumnTray = document.getElementById('transitionColumnTray');
 const transitionColumnDropzone = document.getElementById('transitionColumnDropzone');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
+const fileMenu = document.getElementById('fileMenu');
+const fileMenuButton = document.getElementById('fileMenuButton');
+const settingsMenu = document.getElementById('settingsMenu');
+const settingsMenuButton = document.getElementById('settingsMenuButton');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
 const toolbarNewMachine = document.getElementById('toolbarNewMachine');
 const kmapWindow = document.getElementById('kmapWindow');
@@ -101,6 +106,12 @@ function closeDialog(id) {
 
 function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
+}
+
+function closeAllDropdowns() {
+  saveImageMenu.classList.add('hidden');
+  fileMenu.classList.add('hidden');
+  settingsMenu.classList.add('hidden');
 }
 
 function columnBaseKey(col) {
@@ -2674,10 +2685,27 @@ function attachEvents() {
     btn.addEventListener('click', () => closeDialog(btn.dataset.close));
   });
 
+  fileMenuButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = fileMenu.classList.contains('hidden');
+    closeAllDropdowns();
+    if (willOpen) fileMenu.classList.remove('hidden');
+  });
+
+  settingsMenuButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = settingsMenu.classList.contains('hidden');
+    closeAllDropdowns();
+    if (willOpen) settingsMenu.classList.remove('hidden');
+  });
+
   document.getElementById('newMachineBtn').addEventListener('click', () =>
     promptToSaveIfDirty(() => openDialog('newMachineDialog'))
   );
-  toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
+  toolbarNewMachine.addEventListener('click', () => {
+    closeAllDropdowns();
+    promptToSaveIfDirty(() => openDialog('newMachineDialog'));
+  });
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
   if (toggleTransitionBuilderBtn && transitionColumnBuilder) {
     toggleTransitionBuilderBtn.addEventListener('click', () => {
@@ -2784,6 +2812,7 @@ function attachEvents() {
       loadState(data);
     };
     reader.readAsText(file);
+    closeAllDropdowns();
   });
 
   document.getElementById('toggleTransitionDrawer').addEventListener('click', toggleTransitionDrawer);
@@ -2818,10 +2847,15 @@ function attachEvents() {
     e.returnValue = '';
   });
 
-  document.getElementById('saveButton').addEventListener('click', saveState);
+  document.getElementById('saveButton').addEventListener('click', () => {
+    closeAllDropdowns();
+    saveState();
+  });
   saveImageDropdown.addEventListener('click', (e) => {
     e.stopPropagation();
-    saveImageMenu.classList.toggle('hidden');
+    const willOpen = saveImageMenu.classList.contains('hidden');
+    closeAllDropdowns();
+    if (willOpen) saveImageMenu.classList.remove('hidden');
   });
   document.getElementById('saveImageTable').addEventListener('click', () => {
     saveImageMenu.classList.add('hidden');
@@ -2851,11 +2885,13 @@ function attachEvents() {
     renderPalette();
     renderDiagram();
     markDirty();
+    settingsMenu.classList.add('hidden');
   });
 
   document.getElementById('toggleTheme').addEventListener('click', () => {
     document.body.classList.toggle('dark');
     document.body.classList.toggle('light');
+    settingsMenu.classList.add('hidden');
   });
 
   document.getElementById('nameControl').addEventListener('input', (e) => {
@@ -3362,8 +3398,9 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mousedown', (e) => {
-    if (e.button === 1) {
+    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
       isPanning = true;
+      panWithShift = e.button === 0 && e.shiftKey;
       panStart = { x: e.clientX, y: e.clientY };
       e.preventDefault();
       return;
@@ -3567,8 +3604,8 @@ function attachEvents() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!saveImageMenu.contains(e.target) && e.target !== saveImageDropdown) {
-      saveImageMenu.classList.add('hidden');
+    if (!e.target.closest('.dropdown')) {
+      closeAllDropdowns();
     }
     if ((selectedArrowId || selectedStateId !== null) && !clickTargetsSelection(e.target)) {
       selectedArrowId = null;
@@ -3640,8 +3677,9 @@ function attachEvents() {
   });
 
   document.addEventListener('mouseup', (e) => {
-    if (e.button === 1 && isPanning) {
+    if (isPanning && (e.button === 1 || (panWithShift && e.button === 0))) {
       isPanning = false;
+      panWithShift = false;
       return;
     }
     if (e.button === 2 && currentArrow) {

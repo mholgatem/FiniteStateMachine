@@ -63,6 +63,10 @@ body {
   align-items: center;
 }
 
+#testKmapBtn {
+  display: none;
+}
+
 .dropdown {
   position: relative;
 }
@@ -84,6 +88,12 @@ body {
   gap: 0.35rem;
   min-width: 220px;
   z-index: 15;
+}
+
+.dropdown-menu button,
+.dropdown-menu .file-label {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .dropdown-menu.hidden {
@@ -601,11 +611,11 @@ svg text {
 }
 
 .state-node.missing {
-  fill: var(--warning);
+  fill: var(--surface);
 }
 
 .state-node.overfull {
-  fill: var(--error);
+  fill: var(--surface);
 }
 
 .state-label-text {
@@ -626,7 +636,7 @@ svg text {
 }
 
 .arrow-path.selected {
-  stroke: var(--primary);
+  stroke: #00d7ff;
 }
 
 .arc-handle {
