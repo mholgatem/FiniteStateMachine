@@ -2434,7 +2434,7 @@ function buildKmapExportClone(card, kmap) {
   const clone = card.cloneNode(true);
   clone.style.width = `${card.scrollWidth}px`;
   clone.style.maxWidth = `${card.scrollWidth}px`;
-  clone.classList.add('kmap-exporting');
+  clone.classList.add('exporting');
 
   const wrapper = document.createElement('div');
   wrapper.style.position = 'fixed';

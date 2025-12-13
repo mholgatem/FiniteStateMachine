@@ -903,6 +903,11 @@ svg text {
   color: #000000;
 }
 
+.kmap-card.exporting .kmap-variable-tray,
+.kmap-card.exporting .kmap-expression-actions {
+  display: none;
+}
+
 .transition-column-token {
   background: cornflowerblue;
   color: #fff;
