@@ -83,20 +83,26 @@
       <h3 id="toolbarTitle">Untitled Machine</h3>
     </div>
     <div class="toolbar-actions">
-      <button id="quickRef" class="ghost">Quick Reference</button>
       <div class="dropdown">
         <button id="fileMenuButton" class="ghost dropdown-toggle">File ▾</button>
         <div id="fileMenu" class="dropdown-menu hidden">
-          <button id="toolbarNewMachine" class="ghost" type="button">New State Machine</button>
           <label class="file-label">
             <input type="file" id="loadButton" accept="application/json" hidden />
             <span>Load</span>
           </label>
+          <button id="toolbarNewMachine" class="ghost" type="button">New State Machine</button>
           <button id="saveButton" class="primary" type="button">Save State Machine</button>
+          <div class="dropdown nested-dropdown">
+            <button id="saveImageDropdown" class="ghost dropdown-toggle">Save Image ▾</button>
+            <div id="saveImageMenu" class="dropdown-menu hidden nested-menu">
+              <button id="saveImageTable" type="button">State Definition Table</button>
+              <button id="saveImageDiagram" type="button">State Transition Diagram</button>
+              <button id="saveImageTransitionTable" type="button">State Transition Table</button>
+              <button id="saveImageKmaps" type="button">Karnaugh Maps (ZIP)</button>
+            </div>
+          </div>
         </div>
       </div>
-      <button id="kmapToggle" class="ghost">K-maps</button>
-      <button id="testKmapBtn" class="ghost">TEST KMAP</button>
       <div class="dropdown">
         <button id="settingsMenuButton" class="ghost dropdown-toggle">Settings ▾</button>
         <div id="settingsMenu" class="dropdown-menu hidden">
@@ -104,16 +110,10 @@
           <button id="toggleTheme" class="ghost" type="button">Light/Dark</button>
         </div>
       </div>
+      <button id="quickRef" class="ghost">Quick Reference</button>
       <button id="toggleTransitionDrawer" class="ghost">State Transition Table</button>
-      <div class="dropdown">
-        <button id="saveImageDropdown" class="ghost dropdown-toggle">Save Image ▾</button>
-        <div id="saveImageMenu" class="dropdown-menu hidden">
-          <button id="saveImageTable" type="button">State Definition Table</button>
-          <button id="saveImageDiagram" type="button">State Transition Diagram</button>
-          <button id="saveImageTransitionTable" type="button">State Transition Table</button>
-          <button id="saveImageKmaps" type="button">Karnaugh Maps (ZIP)</button>
-        </div>
-      </div>
+      <button id="kmapToggle" class="ghost">K-maps</button>
+      <button id="testKmapBtn" class="ghost">TEST KMAP</button>
     </div>
   </header>
 

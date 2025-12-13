@@ -108,10 +108,11 @@ function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
-function closeAllDropdowns() {
+function closeAllDropdowns(options = {}) {
+  const { keepFile = false } = options;
   saveImageMenu.classList.add('hidden');
-  fileMenu.classList.add('hidden');
   settingsMenu.classList.add('hidden');
+  if (!keepFile) fileMenu.classList.add('hidden');
 }
 
 function columnBaseKey(col) {
@@ -2854,23 +2855,23 @@ function attachEvents() {
   saveImageDropdown.addEventListener('click', (e) => {
     e.stopPropagation();
     const willOpen = saveImageMenu.classList.contains('hidden');
-    closeAllDropdowns();
+    closeAllDropdowns({ keepFile: true });
     if (willOpen) saveImageMenu.classList.remove('hidden');
   });
   document.getElementById('saveImageTable').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureImage(tablePanel, `${state.name}-state-definition-table.png`);
   });
   document.getElementById('saveImageDiagram').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureImage(document.querySelector('.playmat'), `${state.name}-state-diagram.png`);
   });
   document.getElementById('saveImageTransitionTable').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureTransitionDrawerImage();
   });
   document.getElementById('saveImageKmaps').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureKmapImagesZip();
   });
 

@@ -100,6 +100,20 @@ body {
   display: none;
 }
 
+.nested-dropdown {
+  width: 100%;
+}
+
+.nested-dropdown > .dropdown-toggle {
+  justify-content: space-between;
+}
+
+.nested-menu {
+  left: 100%;
+  right: auto;
+  top: -0.35rem;
+}
+
 .toolbar-left {
   display: flex;
   align-items: center;
