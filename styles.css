@@ -695,7 +695,7 @@ svg text {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .kmap-zip-status {
