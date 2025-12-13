@@ -58,6 +58,7 @@ const kmapWindow = document.getElementById('kmapWindow');
 const kmapWindowHeader = document.getElementById('kmapWindowHeader');
 const kmapList = document.getElementById('kmapList');
 const kmapEmptyState = document.getElementById('kmapEmptyState');
+const kmapZipStatus = document.getElementById('kmapZipStatus');
 const confirmKmapCreate = document.getElementById('confirmKmapCreate');
 const kmapLabelInput = document.getElementById('kmapLabel');
 const kmapVariablesInput = document.getElementById('kmapVariables');
@@ -2432,15 +2433,17 @@ async function captureTransitionDrawerImage() {
 
 function buildKmapExportClone(card, kmap) {
   const clone = card.cloneNode(true);
-  clone.style.width = `${card.scrollWidth}px`;
-  clone.style.maxWidth = `${card.scrollWidth}px`;
+  const exportWidth = (kmapWindow && kmapWindow.scrollWidth) || card.scrollWidth || card.getBoundingClientRect().width;
+
+  clone.style.width = `${exportWidth}px`;
+  clone.style.maxWidth = `${exportWidth}px`;
   clone.classList.add('exporting');
 
   const wrapper = document.createElement('div');
   wrapper.style.position = 'fixed';
   wrapper.style.left = '0';
   wrapper.style.top = '0';
-  wrapper.style.width = `${card.scrollWidth}px`;
+  wrapper.style.width = `${exportWidth}px`;
   wrapper.style.opacity = '0';
   wrapper.style.pointerEvents = 'none';
   wrapper.style.background = '#fff';
@@ -2463,37 +2466,47 @@ async function captureKmapImagesZip() {
 
   const zip = new JSZip();
 
-  for (const card of cards) {
-    const kmap = getKmapById(card.dataset.kmapId);
-    if (!kmap) continue;
-
-    const { wrapper, clone } = buildKmapExportClone(card, kmap);
-    document.body.appendChild(wrapper);
-    await new Promise(requestAnimationFrame);
-
-    const width = clone.scrollWidth;
-    const height = clone.scrollHeight;
-
-    const canvas = await html2canvas(clone, {
-      backgroundColor: '#fff',
-      width,
-      height,
-      scale: window.devicePixelRatio || 1,
-      useCORS: true,
-    });
-
-    const url = canvas.toDataURL('image/png');
-    const base64 = url.split(',')[1];
-    const filename = `${sanitizeFilename(kmap.label || 'kmap')}.png`;
-    zip.file(filename, base64, { base64: true });
-
-    document.body.removeChild(wrapper);
+  if (kmapZipStatus) {
+    kmapZipStatus.classList.remove('hidden');
   }
 
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const zipUrl = URL.createObjectURL(blob);
-  download(`${sanitizeFilename(state.name || 'fsm')}-kmaps.zip`, zipUrl);
-  setTimeout(() => URL.revokeObjectURL(zipUrl), 1000);
+  try {
+    for (const card of cards) {
+      const kmap = getKmapById(card.dataset.kmapId);
+      if (!kmap) continue;
+
+      const { wrapper, clone } = buildKmapExportClone(card, kmap);
+      document.body.appendChild(wrapper);
+      await new Promise(requestAnimationFrame);
+
+      const width = clone.scrollWidth;
+      const height = clone.scrollHeight;
+
+      const canvas = await html2canvas(clone, {
+        backgroundColor: '#fff',
+        width,
+        height,
+        scale: window.devicePixelRatio || 1,
+        useCORS: true,
+      });
+
+      const url = canvas.toDataURL('image/png');
+      const base64 = url.split(',')[1];
+      const filename = `${sanitizeFilename(kmap.label || 'kmap')}.png`;
+      zip.file(filename, base64, { base64: true });
+
+      document.body.removeChild(wrapper);
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const zipUrl = URL.createObjectURL(blob);
+    download(`${sanitizeFilename(state.name || 'fsm')}-kmaps.zip`, zipUrl);
+    setTimeout(() => URL.revokeObjectURL(zipUrl), 1000);
+  } finally {
+    if (kmapZipStatus) {
+      kmapZipStatus.classList.add('hidden');
+    }
+  }
 }
 
 function applyViewTransform() {
