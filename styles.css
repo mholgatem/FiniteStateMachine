@@ -927,12 +927,12 @@ svg text {
 }
 
 .kmap-expr-token {
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 8px;
-  padding: 0.25rem 0.4rem;
+  padding: 0;
   background: var(--surface);
   cursor: grab;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
   display: inline-flex;
   align-items: center;
   min-height: 32px;
@@ -943,8 +943,8 @@ svg text {
 }
 
 .kmap-expr-token.operator {
-  background: cornflowerblue;
-  color: #fff;
+  background: transparent;
+  color: var(--text);
 }
 
 .kmap-card.exporting .kmap-expr-token {
@@ -961,7 +961,7 @@ svg text {
 
 .kmap-card.exporting .kmap-expr-token.operator {
   background: transparent;
-  color: #000000;
+  color: var(--text);
 }
 
 .kmap-card.exporting .kmap-variable-tray,
