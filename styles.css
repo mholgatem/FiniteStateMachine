@@ -695,7 +695,44 @@ svg text {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
+}
+
+.kmap-zip-status {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 11000;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-weight: 600;
+}
+
+.kmap-zip-status::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent, #0f9d9f);
+  box-shadow: 0 0 0 3px rgba(15, 157, 159, 0.15);
+  animation: kmap-zip-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes kmap-zip-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0.6;
+  }
 }
 
 #landing h1 {
@@ -886,6 +923,28 @@ svg text {
   color: #fff;
 }
 
+.kmap-card.exporting .kmap-expr-token {
+  border: none;
+  border-radius: 8px;
+  padding: 0;
+  background: var(--surface);
+  cursor: grab;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.kmap-card.exporting .kmap-expr-token.operator {
+  background: transparent;
+  color: #000000;
+}
+
+.kmap-card.exporting .kmap-variable-tray,
+.kmap-card.exporting .kmap-expression-actions {
+  display: none;
+}
+
 .transition-column-token {
   background: cornflowerblue;
   color: #fff;
@@ -936,6 +995,12 @@ svg text {
   opacity: 0.8;
   margin-bottom: 0.5rem;
   flex-wrap: wrap;
+}
+
+.kmap-export-expression {
+  font-weight: 600;
+  margin: 6px 0 12px;
+  line-height: 1.3;
 }
 
 .kmap-grid-collection {

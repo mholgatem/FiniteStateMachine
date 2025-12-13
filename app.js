@@ -58,6 +58,7 @@ const kmapWindow = document.getElementById('kmapWindow');
 const kmapWindowHeader = document.getElementById('kmapWindowHeader');
 const kmapList = document.getElementById('kmapList');
 const kmapEmptyState = document.getElementById('kmapEmptyState');
+const kmapZipStatus = document.getElementById('kmapZipStatus');
 const confirmKmapCreate = document.getElementById('confirmKmapCreate');
 const kmapLabelInput = document.getElementById('kmapLabel');
 const kmapVariablesInput = document.getElementById('kmapVariables');
@@ -1277,6 +1278,12 @@ function download(filename, content) {
   link.click();
 }
 
+function sanitizeFilename(name, fallback = 'kmap') {
+  const base = (name || fallback).toString().trim();
+  const cleaned = base.replace(/[^a-z0-9_-]+/gi, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned || fallback;
+}
+
 function saveState() {
   ensureTransitionTableStructure();
   const payload = JSON.stringify(state, null, 2);
@@ -2096,6 +2103,7 @@ function renderKmaps() {
   state.kmaps.forEach((kmap) => {
     const card = document.createElement('div');
     card.className = 'kmap-card';
+    card.dataset.kmapId = kmap.id;
     const layout = buildKmapLayout(kmap);
     card.dataset.totalRows = layout.totalRows;
     card.dataset.totalCols = layout.totalCols;
@@ -2423,6 +2431,84 @@ async function captureTransitionDrawerImage() {
   if (!wasOpen) closeTransitionDrawer();
 }
 
+function buildKmapExportClone(card, kmap) {
+  const clone = card.cloneNode(true);
+  const exportWidth = (kmapWindow && kmapWindow.scrollWidth) || card.scrollWidth || card.getBoundingClientRect().width;
+
+  clone.style.width = `${exportWidth}px`;
+  clone.style.maxWidth = `${exportWidth}px`;
+  clone.classList.add('exporting');
+
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '0';
+  wrapper.style.top = '0';
+  wrapper.style.width = `${exportWidth}px`;
+  wrapper.style.opacity = '0';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.background = '#fff';
+  wrapper.style.zIndex = '9999';
+  wrapper.appendChild(clone);
+
+  return { wrapper, clone };
+}
+
+async function captureKmapImagesZip() {
+  if (!state.kmaps.length) return;
+  if (typeof JSZip === 'undefined') {
+    window.alert('Unable to export k-maps because the ZIP library is unavailable.');
+    return;
+  }
+
+  renderKmaps();
+  const cards = Array.from(kmapList.querySelectorAll('.kmap-card'));
+  if (!cards.length) return;
+
+  const zip = new JSZip();
+
+  if (kmapZipStatus) {
+    kmapZipStatus.classList.remove('hidden');
+  }
+
+  try {
+    for (const card of cards) {
+      const kmap = getKmapById(card.dataset.kmapId);
+      if (!kmap) continue;
+
+      const { wrapper, clone } = buildKmapExportClone(card, kmap);
+      document.body.appendChild(wrapper);
+      await new Promise(requestAnimationFrame);
+
+      const width = clone.scrollWidth;
+      const height = clone.scrollHeight;
+
+      const canvas = await html2canvas(clone, {
+        backgroundColor: '#fff',
+        width,
+        height,
+        scale: window.devicePixelRatio || 1,
+        useCORS: true,
+      });
+
+      const url = canvas.toDataURL('image/png');
+      const base64 = url.split(',')[1];
+      const filename = `${sanitizeFilename(kmap.label || 'kmap')}.png`;
+      zip.file(filename, base64, { base64: true });
+
+      document.body.removeChild(wrapper);
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const zipUrl = URL.createObjectURL(blob);
+    download(`${sanitizeFilename(state.name || 'fsm')}-kmaps.zip`, zipUrl);
+    setTimeout(() => URL.revokeObjectURL(zipUrl), 1000);
+  } finally {
+    if (kmapZipStatus) {
+      kmapZipStatus.classList.add('hidden');
+    }
+  }
+}
+
 function applyViewTransform() {
   viewport.setAttribute(
     'transform',
@@ -2694,6 +2780,10 @@ function attachEvents() {
   document.getElementById('saveImageTransitionTable').addEventListener('click', () => {
     saveImageMenu.classList.add('hidden');
     captureTransitionDrawerImage();
+  });
+  document.getElementById('saveImageKmaps').addEventListener('click', () => {
+    saveImageMenu.classList.add('hidden');
+    captureKmapImagesZip();
   });
 
   toggleTableBtn.addEventListener('click', () => {
