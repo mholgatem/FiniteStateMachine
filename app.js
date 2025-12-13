@@ -2440,6 +2440,7 @@ function buildKmapExportClone(card, kmap) {
   wrapper.style.position = 'fixed';
   wrapper.style.left = '0';
   wrapper.style.top = '0';
+  wrapper.style.width = `${card.scrollWidth}px`;
   wrapper.style.opacity = '0';
   wrapper.style.pointerEvents = 'none';
   wrapper.style.background = '#fff';
