@@ -945,6 +945,36 @@ svg text {
   display: none;
 }
 
+.kmap-test-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 9999;
+}
+
+.kmap-test-frame {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  padding: 1rem;
+  min-width: min(960px, 95vw);
+}
+
+.kmap-test-frame-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
 .transition-column-token {
   background: cornflowerblue;
   color: #fff;

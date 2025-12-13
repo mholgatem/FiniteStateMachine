@@ -2433,7 +2433,20 @@ async function captureTransitionDrawerImage() {
 
 function buildKmapExportClone(card, kmap) {
   const clone = card.cloneNode(true);
-  const exportWidth = (kmapWindow && kmapWindow.scrollWidth) || card.scrollWidth || card.getBoundingClientRect().width;
+  const kmapBody = kmapWindow?.querySelector('.kmap-window-body');
+  const declaredWidth = kmapWindow ? parseFloat(kmapWindow.style.width || '0') || 0 : 0;
+  const windowRect = kmapWindow?.getBoundingClientRect();
+  const bodyRect = kmapBody?.getBoundingClientRect();
+  const exportWidth = Math.max(
+    windowRect?.width || 0,
+    bodyRect?.width || 0,
+    kmapWindow?.scrollWidth || 0,
+    declaredWidth,
+    kmapWindowState?.width || 0,
+    card.scrollWidth || 0,
+    card.getBoundingClientRect().width || 0,
+    840,
+  );
 
   clone.style.width = `${exportWidth}px`;
   clone.style.maxWidth = `${exportWidth}px`;
@@ -2451,6 +2464,46 @@ function buildKmapExportClone(card, kmap) {
   wrapper.appendChild(clone);
 
   return { wrapper, clone };
+}
+
+function showKmapExportTest() {
+  renderKmaps();
+  const firstCard = kmapList?.querySelector('.kmap-card');
+  if (!firstCard) {
+    window.alert('No k-maps available to test.');
+    return;
+  }
+
+  const kmap = getKmapById(firstCard.dataset.kmapId);
+  if (!kmap) {
+    window.alert('Unable to locate the first k-map.');
+    return;
+  }
+
+  const { clone } = buildKmapExportClone(firstCard, kmap);
+  const overlay = document.createElement('div');
+  overlay.className = 'kmap-test-overlay';
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  const frame = document.createElement('div');
+  frame.className = 'kmap-test-frame';
+
+  const header = document.createElement('div');
+  header.className = 'kmap-test-frame-header';
+  const title = document.createElement('div');
+  title.textContent = 'K-map export clone preview';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'ghost';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  header.append(title, closeBtn);
+
+  frame.append(header, clone);
+  overlay.appendChild(frame);
+  document.body.appendChild(overlay);
 }
 
 async function captureKmapImagesZip() {
@@ -2637,6 +2690,7 @@ function attachEvents() {
     if (kmapWindow.classList.contains('hidden')) showKmapWorkspace();
     else closeKmapWindow();
   });
+  document.getElementById('testKmapBtn').addEventListener('click', showKmapExportTest);
   document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
   document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
   confirmKmapCreate.addEventListener('click', createKmapFromDialog);
