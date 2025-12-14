@@ -93,7 +93,14 @@ body {
 .dropdown-menu button,
 .dropdown-menu .file-label {
   width: 100%;
+}
+
+.dropdown-menu button {
   justify-content: flex-start;
+}
+
+.dropdown-menu .file-label {
+  justify-content: center;
 }
 
 .dropdown-menu.hidden {
