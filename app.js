@@ -3491,9 +3491,16 @@ function attachEvents() {
       const offsetX = st.x - start.x;
       const offsetY = st.y - start.y;
       const isResize = e.ctrlKey;
+      const startArrowWithAlt = e.button === 0 && e.altKey;
       let moved = false;
-      if (e.button === 2) {
-        currentArrow = { from: id, toPoint: getSVGPoint(e.clientX, e.clientY), arcOffset: 0 };
+      if (e.button === 2 || startArrowWithAlt) {
+        currentArrow = {
+          from: id,
+          toPoint: getSVGPoint(e.clientX, e.clientY),
+          arcOffset: 0,
+          startButton: e.button,
+          startWithAlt: startArrowWithAlt,
+        };
         renderDiagram();
         return;
       }
@@ -3522,7 +3529,7 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mouseup', (e) => {
-    if (currentArrow && e.button === 2) {
+    if (currentArrow && (e.button === currentArrow.startButton || (currentArrow.startWithAlt && e.button === 0))) {
       const targetState = e.target.closest('circle.state-node');
       if (targetState) {
         const toId = parseInt(targetState.parentNode.dataset.id, 10);
@@ -3683,7 +3690,7 @@ function attachEvents() {
       panWithShift = false;
       return;
     }
-    if (e.button === 2 && currentArrow) {
+    if (currentArrow && (e.button === 2 || (currentArrow.startWithAlt && e.button === 0))) {
       if (previewPath && previewPath.parentNode) {
         previewPath.parentNode.removeChild(previewPath);
       }

@@ -21,7 +21,7 @@
         <button id="newMachineBtn" class="primary">+ New State Machine</button>
         <label class="file-label">
           <input type="file" id="loadMachineInput" accept="application/json" hidden />
-          <span>Load State Machine</span>
+          <span>Load</span>
         </label>
       </div>
     </div>
@@ -89,7 +89,7 @@
           <button id="toolbarNewMachine" class="ghost" type="button">New</button>
           <label class="file-label">
             <input type="file" id="loadButton" accept="application/json" hidden />
-            <span>Load State Machine</span>
+            <span>Load</span>
           </label>
           <button id="saveButton" class="primary" type="button">Save</button>
           <div class="dropdown nested-dropdown">
@@ -220,13 +220,14 @@
     <div class="dialog">
       <h2>Quick Reference</h2>
       <ul>
-        <li>Drag states from the left column onto the playmat.</li>
-        <li>Ctrl + Drag a state to resize it.</li>
-        <li>Right-click a state, drag, and release on a target state to create a transition.</li>
-        <li>Drag the midpoint handle on an arrow to curve it and adjust snap points.</li>
-        <li>Scroll to zoom, or press and drag the middle mouse button to pan the playmat.</li>
-        <li>Backspace with an arrow selected removes it.</li>
-        <li>Right-click an arrow to set inputs (and outputs for Mealy).</li>
+        <li>Drag states from the left <i>unused states tray</i> onto the playmat</li>
+        <li><b>Ctrl + Drag</b> a placed state to resize it.</li>
+        <li><b>Alt + Drag</b> or <b>Right-click Drag</b> from <i>state → state</i> to create a <i>transition arrow</i>.</li>
+        <li><b>Drag</b> the midpoint handle on an arrow to curve it and adjust snap points.</li>
+        <li><b>Scroll</b> to zoom</li>
+        <li><b>Shift + Drag</b> or <b>Middle-Click Drag</b> to pan.</li>
+        <li><b>Backspace</b> on selected state or transition will delete that element.</li>
+        <li><b>Right-click</b> an arrow to <i>set inputs</i> (and outputs for Mealy).</li>
       </ul>
       <div class="dialog-actions">
         <button data-close="quickRefDialog">Close</button>
