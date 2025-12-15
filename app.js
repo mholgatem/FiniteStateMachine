@@ -2320,7 +2320,7 @@ function renderKmapCircles(root = null) {
 }
 
 function scheduleKmapCircleRender() {
-  requestAnimationFrame(renderKmapCircles);
+  requestAnimationFrame(() => renderKmapCircles());
 }
 
 function setShowKmapCircles(value) {
