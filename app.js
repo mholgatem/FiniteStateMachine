@@ -2116,6 +2116,34 @@ function clusterRects(rects, threshold = 28) {
   return clusters;
 }
 
+function splitExpressionSections(tokens = []) {
+  const sections = [];
+  let depth = 0;
+  let current = [];
+
+  const pushCurrent = () => {
+    if (current.some((tk) => tk.type === 'var')) {
+      sections.push(current);
+    }
+    current = [];
+  };
+
+  tokens.forEach((tk) => {
+    if (tk.type === 'op' && tk.value === '+' && depth === 0) {
+      pushCurrent();
+      return;
+    }
+    current.push(tk);
+    if (tk.type === 'paren') {
+      if (tk.value === '(') depth += 1;
+      else if (tk.value === ')') depth = Math.max(0, depth - 1);
+    }
+  });
+
+  pushCurrent();
+  return sections;
+}
+
 function renderKmapCircles() {
   document.querySelectorAll('.kmap-circle-overlay').forEach((ov) => {
     ov.innerHTML = '';
@@ -2129,70 +2157,79 @@ function renderKmapCircles() {
     if (!kmap || !kmap.expression) return;
     const layout = buildKmapLayout(kmap);
     const variables = kmapVariablesForLayout(layout);
-    const exprTable = buildExpressionTruthTable(kmap.expression, variables);
-    if (!exprTable) return;
+    const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+    const sections = splitExpressionSections(tokens);
+    if (!sections.length) return;
     const cells = collectKmapCells(kmap, card, layout);
     const overlay = card.querySelector('.kmap-circle-overlay');
     if (!overlay) return;
     const overlayRect = overlay.getBoundingClientRect();
-    const padding = 8;
-    const activeRects = cells
-      .map((cell) => {
-        if (exprTable.get(cell.key) !== '1') return null;
-        const rect = cell.element.getBoundingClientRect();
-        return {
-          minX: rect.left - overlayRect.left - padding,
-          minY: rect.top - overlayRect.top - padding,
-          maxX: rect.right - overlayRect.left + padding,
-          maxY: rect.bottom - overlayRect.top + padding,
-        };
-      })
-      .filter(Boolean);
-
-    if (!activeRects.length) return;
-
-    const clusters = clusterRects(activeRects, 32);
-    const strokeColor = kmapColorForId(kmap.id);
-    const fillColor = colorWithAlpha(strokeColor, 0.12);
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '100%');
     svg.setAttribute('height', '100%');
     overlay.appendChild(svg);
 
-    clusters.forEach((cl) => {
-      const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rectEl.setAttribute('x', cl.minX);
-      rectEl.setAttribute('y', cl.minY);
-      rectEl.setAttribute('width', cl.maxX - cl.minX);
-      rectEl.setAttribute('height', cl.maxY - cl.minY);
-      rectEl.setAttribute('rx', 14);
-      rectEl.setAttribute('ry', 14);
-      rectEl.setAttribute('fill', fillColor);
-      rectEl.setAttribute('stroke', strokeColor);
-      rectEl.setAttribute('stroke-width', '2');
-      rectEl.setAttribute('class', 'kmap-circle-rect');
-      svg.appendChild(rectEl);
-    });
+    const paletteOffset = state.kmaps.findIndex((m) => m.id === kmap.id) % kmapCirclePalette.length;
 
-    const sorted = [...clusters].sort((a, b) => (a.minX === b.minX ? a.minY - b.minY : a.minX - b.minX));
-    for (let i = 0; i < sorted.length - 1; i += 1) {
-      const start = sorted[i];
-      const end = sorted[i + 1];
-      const dx = end.cx - start.cx;
-      const dy = end.cy - start.cy;
-      const dist = Math.hypot(dx, dy) || 1;
-      const offset = Math.min(40, dist / 3);
-      const cx = (start.cx + end.cx) / 2 - (dy / dist) * offset;
-      const cy = (start.cy + end.cy) / 2 + (dx / dist) * offset;
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M ${start.cx} ${start.cy} Q ${cx} ${cy} ${end.cx} ${end.cy}`);
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', strokeColor);
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('stroke-dasharray', '8 6');
-      path.setAttribute('class', 'kmap-circle-link');
-      svg.appendChild(path);
-    }
+    sections.forEach((sectionTokens, sectionIdx) => {
+      const canonical = tokensToCanonical(sectionTokens);
+      const sectionTable = buildExpressionTruthTable(canonical, variables);
+      if (!sectionTable) return;
+      const padding = 8;
+      const activeRects = cells
+        .map((cell) => {
+          if (sectionTable.get(cell.key) !== '1') return null;
+          const rect = cell.element.getBoundingClientRect();
+          return {
+            minX: rect.left - overlayRect.left - padding,
+            minY: rect.top - overlayRect.top - padding,
+            maxX: rect.right - overlayRect.left + padding,
+            maxY: rect.bottom - overlayRect.top + padding,
+          };
+        })
+        .filter(Boolean);
+
+      if (!activeRects.length) return;
+
+      const clusters = clusterRects(activeRects, 32);
+      const strokeColor = kmapCirclePalette[(paletteOffset + sectionIdx) % kmapCirclePalette.length];
+      const fillColor = colorWithAlpha(strokeColor, 0.12);
+
+      clusters.forEach((cl) => {
+        const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rectEl.setAttribute('x', cl.minX);
+        rectEl.setAttribute('y', cl.minY);
+        rectEl.setAttribute('width', cl.maxX - cl.minX);
+        rectEl.setAttribute('height', cl.maxY - cl.minY);
+        rectEl.setAttribute('rx', 14);
+        rectEl.setAttribute('ry', 14);
+        rectEl.setAttribute('fill', fillColor);
+        rectEl.setAttribute('stroke', strokeColor);
+        rectEl.setAttribute('stroke-width', '2');
+        rectEl.setAttribute('class', 'kmap-circle-rect');
+        svg.appendChild(rectEl);
+      });
+
+      const sorted = [...clusters].sort((a, b) => (a.minX === b.minX ? a.minY - b.minY : a.minX - b.minX));
+      for (let i = 0; i < sorted.length - 1; i += 1) {
+        const start = sorted[i];
+        const end = sorted[i + 1];
+        const dx = end.cx - start.cx;
+        const dy = end.cy - start.cy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const offset = Math.min(40, dist / 3);
+        const cx = (start.cx + end.cx) / 2 - (dy / dist) * offset;
+        const cy = (start.cy + end.cy) / 2 + (dx / dist) * offset;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${start.cx} ${start.cy} Q ${cx} ${cy} ${end.cx} ${end.cy}`);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', strokeColor);
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-dasharray', '8 6');
+        path.setAttribute('class', 'kmap-circle-link');
+        svg.appendChild(path);
+      }
+    });
   });
 }
 
