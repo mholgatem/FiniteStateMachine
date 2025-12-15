@@ -556,6 +556,10 @@ button:active {
   box-shadow: 0 15px 40px rgba(0,0,0,0.2);
 }
 
+.dialog ul li.spaced-bullet {
+  margin-top: 0.35rem;
+}
+
 .dialog-actions {
   display: flex;
   gap: 0.5rem;
