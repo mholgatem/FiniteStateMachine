@@ -783,6 +783,7 @@ svg text {
   padding: 0.85rem;
   background: var(--surface);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  position: relative;
 }
 
 .kmap-card .kmap-title {
@@ -1124,4 +1125,33 @@ svg text {
   border-right: 2px solid var(--border);
   border-bottom: 2px solid var(--border);
   border-radius: 2px;
+}
+
+.kmap-visual-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.kmap-visual-overlay.hidden {
+  display: none;
+}
+
+.kmap-circle-highlight {
+  fill: none;
+  stroke-width: 2px;
+}
+
+.kmap-circle-highlight-halo {
+  fill: none;
+  stroke-width: 10px;
+  stroke-opacity: 0.08;
+}
+
+.kmap-connector {
+  fill: none;
+  stroke-width: 2px;
+  stroke-dasharray: 6 6;
+  stroke-linecap: round;
 }

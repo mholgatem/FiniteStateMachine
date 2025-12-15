@@ -28,6 +28,7 @@ let transitionTableGroupSize = 0;
 let verifyButtonResetTimer = null;
 let dialogBackdropMouseDownTarget = null;
 let dialogBackdropCloseBlocked = false;
+let showKmapCircles = false;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -66,6 +67,8 @@ const kmapDirectionInput = document.getElementById('kmapDirection');
 const kmapResizeHandle = document.getElementById('kmapResizeHandle');
 const transitionColumnBuilder = document.getElementById('transitionColumnBuilder');
 const toggleTransitionBuilderBtn = document.getElementById('toggleTransitionBuilder');
+const toggleKmapCirclesBtn = document.getElementById('toggleKmapCircles');
+const svgNS = 'http://www.w3.org/2000/svg';
 
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
 let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
@@ -1545,6 +1548,7 @@ function updateKmapExpressionTokens(kmap, tokens, tray) {
   kmap.expressionTokens = tokens;
   kmap.expression = tokensToCanonical(tokens) || '';
   if (tray) renderExpressionTray(tray, tokens, kmap.id);
+  refreshKmapCircles();
 }
 
 function getKmapById(id) {
@@ -1909,6 +1913,156 @@ function buildKmapTruthTable(kmap) {
   return { table, variables };
 }
 
+function computeKmapCellMappings(kmap) {
+  const layout = buildKmapLayout(kmap);
+  const variables = [...layout.mapVars, ...layout.colVars, ...layout.rowVars];
+  const baseRows = layout.baseRows || 1;
+  const baseCols = layout.baseCols || 1;
+  const cells = [];
+
+  for (let r = 0; r < layout.totalRows; r += 1) {
+    for (let c = 0; c < layout.totalCols; c += 1) {
+      const sub = layout.submaps.find(
+        (s) => r >= s.rowOffset && r < s.rowOffset + baseRows && c >= s.colOffset && c < s.colOffset + baseCols,
+      );
+      const mapBits = sub?.mapCode || ''.padEnd(layout.mapVars.length, '0');
+      const colCode = layout.colCodes[c - (sub?.colOffset || 0)] || '';
+      const rowCode = layout.rowCodes[r - (sub?.rowOffset || 0)] || '';
+      const bits = `${mapBits}${colCode}${rowCode}`;
+      const key = variables
+        .map((name, idx) => (bits[idx] === '1' ? '1' : '0'))
+        .join('');
+      cells.push({ row: r, col: c, key, submap: sub ? `${sub.mapRow}-${sub.mapCol}` : '0-0' });
+    }
+  }
+
+  return { layout, variables, cells };
+}
+
+function getCircleColor(index) {
+  const hue = (index * 67) % 360;
+  return `hsl(${hue}, 70%, 55%)`;
+}
+
+function shouldConnectHighlights(a, b) {
+  if (!a || !b) return false;
+  if (a.submap !== b.submap) return true;
+  const rowGap = Math.abs(a.row - b.row);
+  const colGap = Math.abs(a.col - b.col);
+  return rowGap > 1 || colGap > 1;
+}
+
+function buildConnectorPath(a, b) {
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.sqrt(dx * dx + dy * dy) || 1;
+  const offset = Math.min(24, Math.max(10, length * 0.15));
+  const normX = -dy / length;
+  const normY = dx / length;
+  const cx = midX + normX * offset;
+  const cy = midY + normY * offset;
+  return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
+}
+
+function refreshKmapCircles() {
+  if (!kmapList) return;
+
+  const overlays = kmapList.querySelectorAll('.kmap-visual-overlay');
+  overlays.forEach((ov) => ov.classList.toggle('hidden', !showKmapCircles));
+
+  if (!showKmapCircles) {
+    overlays.forEach((ov) => {
+      ov.innerHTML = '';
+    });
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    state.kmaps.forEach((kmap) => {
+      const card = kmapList.querySelector(`.kmap-card[data-kmap-id="${kmap.id}"]`);
+      if (!card) return;
+      const overlay = card.querySelector('.kmap-visual-overlay');
+      if (!overlay) return;
+
+      const cardRect = card.getBoundingClientRect();
+      overlay.setAttribute('viewBox', `0 0 ${cardRect.width} ${cardRect.height}`);
+      overlay.setAttribute('width', cardRect.width);
+      overlay.setAttribute('height', cardRect.height);
+      overlay.innerHTML = '';
+
+      const mapping = computeKmapCellMappings(kmap);
+      const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+      const canonical = tokensToCanonical(tokens);
+      if (!canonical) return;
+      const exprTable = buildExpressionTruthTable(canonical, mapping.variables);
+      if (!exprTable) return;
+
+      const positions = {};
+      card.querySelectorAll('.kmap-cell-input').forEach((input) => {
+        const row = parseInt(input.dataset.rowIndex, 10);
+        const col = parseInt(input.dataset.colIndex, 10);
+        if (Number.isNaN(row) || Number.isNaN(col)) return;
+        const rect = input.getBoundingClientRect();
+        positions[kmapCellKey(row, col)] = {
+          x: rect.left - cardRect.left + rect.width / 2 + card.scrollLeft,
+          y: rect.top - cardRect.top + rect.height / 2 + card.scrollTop,
+          width: rect.width,
+          height: rect.height,
+        };
+      });
+
+      const highlights = mapping.cells
+        .filter((cell) => exprTable.get(cell.key) === '1')
+        .map((cell) => {
+          const pos = positions[kmapCellKey(cell.row, cell.col)];
+          if (!pos) return null;
+          return { ...pos, row: cell.row, col: cell.col, submap: cell.submap };
+        })
+        .filter(Boolean);
+
+      if (!highlights.length) return;
+
+      highlights.forEach((hl, idx) => {
+        const color = getCircleColor(idx);
+        const radius = Math.max(hl.width, hl.height) / 2 + 6;
+        const halo = document.createElementNS(svgNS, 'circle');
+        halo.setAttribute('cx', hl.x);
+        halo.setAttribute('cy', hl.y);
+        halo.setAttribute('r', radius + 6);
+        halo.setAttribute('stroke', color);
+        halo.classList.add('kmap-circle-highlight-halo');
+        overlay.appendChild(halo);
+
+        const circle = document.createElementNS(svgNS, 'circle');
+        circle.setAttribute('cx', hl.x);
+        circle.setAttribute('cy', hl.y);
+        circle.setAttribute('r', radius);
+        circle.setAttribute('stroke', color);
+        circle.classList.add('kmap-circle-highlight');
+        overlay.appendChild(circle);
+      });
+
+      highlights.forEach((hl, idx) => {
+        if (idx === highlights.length - 1) return;
+        const next = highlights[idx + 1];
+        if (!shouldConnectHighlights(hl, next)) return;
+        const path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('d', buildConnectorPath(hl, next));
+        path.setAttribute('stroke', getCircleColor(idx));
+        path.classList.add('kmap-connector');
+        overlay.appendChild(path);
+      });
+    });
+  });
+}
+
+function updateKmapCircleToggleLabel() {
+  if (!toggleKmapCirclesBtn) return;
+  toggleKmapCirclesBtn.textContent = showKmapCircles ? 'Hide Circles' : 'Show Circles';
+}
+
 function verifyKmapExpression(kmap) {
   if (!kmap) return { passed: false, reason: 'No k-map selected' };
   const kmapTable = buildKmapTruthTable(kmap);
@@ -2096,6 +2250,7 @@ function renderKmaps() {
   state.kmaps.forEach((kmap) => {
     const card = document.createElement('div');
     card.className = 'kmap-card';
+    card.dataset.kmapId = kmap.id;
     const layout = buildKmapLayout(kmap);
     card.dataset.totalRows = layout.totalRows;
     card.dataset.totalCols = layout.totalCols;
@@ -2188,8 +2343,16 @@ function renderKmaps() {
     expressionRow.appendChild(exprTrayWrapper);
 
     card.appendChild(expressionRow);
+    const overlay = document.createElementNS(svgNS, 'svg');
+    overlay.classList.add('kmap-visual-overlay');
+    overlay.setAttribute('width', '100%');
+    overlay.setAttribute('height', '100%');
+    overlay.dataset.kmapId = kmap.id;
+    card.appendChild(overlay);
     kmapList.appendChild(card);
   });
+
+  refreshKmapCircles();
 }
 
 function openKmapWindow() {
@@ -2553,6 +2716,14 @@ function attachEvents() {
   });
   document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
   document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
+  if (toggleKmapCirclesBtn) {
+    toggleKmapCirclesBtn.addEventListener('click', () => {
+      showKmapCircles = !showKmapCircles;
+      updateKmapCircleToggleLabel();
+      refreshKmapCircles();
+    });
+    updateKmapCircleToggleLabel();
+  }
   confirmKmapCreate.addEventListener('click', createKmapFromDialog);
   kmapLabelInput.addEventListener('input', validateKmapDialog);
   kmapVariablesInput.addEventListener('input', validateKmapDialog);
@@ -2670,6 +2841,7 @@ function attachEvents() {
 
   window.addEventListener('resize', () => {
     updateDrawerWidth(drawerWidth);
+    refreshKmapCircles();
   });
 
   window.addEventListener('beforeunload', (e) => {
