@@ -1069,6 +1069,35 @@ svg text {
   gap: 1rem;
 }
 
+.kmap-grid-wrapper {
+  position: relative;
+}
+
+.kmap-circle-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.kmap-circle-overlay.hidden {
+  display: none;
+}
+
+.kmap-circle-overlay svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.kmap-circle-rect {
+  stroke-linejoin: round;
+}
+
+.kmap-circle-link {
+  stroke-linecap: round;
+}
+
 .kmap-submap {
   background: var(--surface);
   border: 1px solid var(--border);

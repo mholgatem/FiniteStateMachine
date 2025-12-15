@@ -64,6 +64,7 @@ const kmapWindowHeader = document.getElementById('kmapWindowHeader');
 const kmapList = document.getElementById('kmapList');
 const kmapEmptyState = document.getElementById('kmapEmptyState');
 const kmapZipStatus = document.getElementById('kmapZipStatus');
+const kmapCircleToggle = document.getElementById('toggleKmapCircles');
 const confirmKmapCreate = document.getElementById('confirmKmapCreate');
 const kmapLabelInput = document.getElementById('kmapLabel');
 const kmapVariablesInput = document.getElementById('kmapVariables');
@@ -77,7 +78,9 @@ let kmapWindowState = { width: 840, height: 540, left: null, top: null };
 let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
 let kmapExpressionDragState = null;
 let transitionColumnDragState = null;
+let showKmapCircles = false;
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
+const kmapCirclePalette = ['#2563eb', '#d946ef', '#22c55e', '#f97316', '#14b8a6', '#f59e0b'];
 
 function coerceAllowedStateCount(value) {
   const num = parseInt(value, 10);
@@ -1564,6 +1567,7 @@ function updateKmapExpressionTokens(kmap, tokens, tray) {
   kmap.expressionTokens = tokens;
   kmap.expression = tokensToCanonical(tokens) || '';
   if (tray) renderExpressionTray(tray, tokens, kmap.id);
+  scheduleKmapCircleRender();
 }
 
 function getKmapById(id) {
@@ -1703,6 +1707,7 @@ function syncExpressionInput(target, kmap, providedState = null) {
   const tokens = normalizeExpressionTokens(state.raw);
   const canonical = tokensToCanonical(tokens);
   if (kmap) kmap.expression = canonical || state.raw.trim();
+  if (kmap) scheduleKmapCircleRender();
 }
 
 function insertIntoExpression(state, insertText) {
@@ -2029,6 +2034,177 @@ function kmapCellKey(row, col) {
   return `${row}-${col}`;
 }
 
+function kmapVariablesForLayout(layout) {
+  return [...(layout.mapVars || []), ...(layout.colVars || []), ...(layout.rowVars || [])];
+}
+
+function kmapColorForId(kmapId) {
+  const idx = state.kmaps.findIndex((m) => m.id === kmapId);
+  return kmapCirclePalette[idx >= 0 ? idx % kmapCirclePalette.length : 0];
+}
+
+function computeCellKeyForLayout(layout, row, col) {
+  const baseRows = layout.baseRows || 1;
+  const baseCols = layout.baseCols || 1;
+  const sub = (layout.submaps || []).find(
+    (s) => row >= s.rowOffset && row < s.rowOffset + baseRows && col >= s.colOffset && col < s.colOffset + baseCols,
+  );
+  const mapBits = sub?.mapCode || ''.padEnd((layout.mapVars || []).length, '0');
+  const colCode = layout.colCodes[col - (sub?.colOffset || 0)] || '';
+  const rowCode = layout.rowCodes[row - (sub?.rowOffset || 0)] || '';
+  const bits = `${mapBits}${colCode}${rowCode}`;
+  const variables = kmapVariablesForLayout(layout);
+  const assignment = {};
+  variables.forEach((name, idx) => {
+    assignment[name] = bits[idx] === '1';
+  });
+  const key = variables.map((v) => (assignment[v] ? '1' : '0')).join('');
+  return { key, submap: sub };
+}
+
+function collectKmapCells(kmap, card, layout) {
+  const cells = [];
+  for (let r = 0; r < layout.totalRows; r += 1) {
+    for (let c = 0; c < layout.totalCols; c += 1) {
+      const input = card.querySelector(
+        `.kmap-cell-input[data-row-index="${r}"][data-col-index="${c}"]`,
+      );
+      if (!input) continue;
+      const { key, submap } = computeCellKeyForLayout(layout, r, c);
+      cells.push({ row: r, col: c, key, element: input, submap });
+    }
+  }
+  return cells;
+}
+
+function colorWithAlpha(hex, alpha) {
+  if (!hex || typeof hex !== 'string') return hex;
+  const safe = hex.replace('#', '');
+  if (safe.length !== 6) return hex;
+  const r = parseInt(safe.slice(0, 2), 16);
+  const g = parseInt(safe.slice(2, 4), 16);
+  const b = parseInt(safe.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return hex;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function rectDistance(a, b) {
+  const dx = Math.max(0, Math.max(a.minX - b.maxX, b.minX - a.maxX));
+  const dy = Math.max(0, Math.max(a.minY - b.maxY, b.minY - a.maxY));
+  return Math.hypot(dx, dy);
+}
+
+function clusterRects(rects, threshold = 28) {
+  const clusters = [];
+  rects.forEach((rect) => {
+    let cluster = clusters.find((c) => rectDistance(c, rect) <= threshold);
+    if (!cluster) {
+      cluster = { ...rect, boxes: [rect] };
+      clusters.push(cluster);
+    } else {
+      cluster.minX = Math.min(cluster.minX, rect.minX);
+      cluster.minY = Math.min(cluster.minY, rect.minY);
+      cluster.maxX = Math.max(cluster.maxX, rect.maxX);
+      cluster.maxY = Math.max(cluster.maxY, rect.maxY);
+      cluster.boxes.push(rect);
+    }
+  });
+  clusters.forEach((c) => {
+    c.cx = (c.minX + c.maxX) / 2;
+    c.cy = (c.minY + c.maxY) / 2;
+  });
+  return clusters;
+}
+
+function renderKmapCircles() {
+  document.querySelectorAll('.kmap-circle-overlay').forEach((ov) => {
+    ov.innerHTML = '';
+    ov.classList.toggle('hidden', !showKmapCircles);
+  });
+  if (!showKmapCircles) return;
+
+  const cards = Array.from(kmapList?.querySelectorAll('.kmap-card') || []);
+  cards.forEach((card) => {
+    const kmap = getKmapById(card.dataset.kmapId);
+    if (!kmap || !kmap.expression) return;
+    const layout = buildKmapLayout(kmap);
+    const variables = kmapVariablesForLayout(layout);
+    const exprTable = buildExpressionTruthTable(kmap.expression, variables);
+    if (!exprTable) return;
+    const cells = collectKmapCells(kmap, card, layout);
+    const overlay = card.querySelector('.kmap-circle-overlay');
+    if (!overlay) return;
+    const overlayRect = overlay.getBoundingClientRect();
+    const padding = 8;
+    const activeRects = cells
+      .map((cell) => {
+        if (exprTable.get(cell.key) !== '1') return null;
+        const rect = cell.element.getBoundingClientRect();
+        return {
+          minX: rect.left - overlayRect.left - padding,
+          minY: rect.top - overlayRect.top - padding,
+          maxX: rect.right - overlayRect.left + padding,
+          maxY: rect.bottom - overlayRect.top + padding,
+        };
+      })
+      .filter(Boolean);
+
+    if (!activeRects.length) return;
+
+    const clusters = clusterRects(activeRects, 32);
+    const strokeColor = kmapColorForId(kmap.id);
+    const fillColor = colorWithAlpha(strokeColor, 0.12);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    overlay.appendChild(svg);
+
+    clusters.forEach((cl) => {
+      const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rectEl.setAttribute('x', cl.minX);
+      rectEl.setAttribute('y', cl.minY);
+      rectEl.setAttribute('width', cl.maxX - cl.minX);
+      rectEl.setAttribute('height', cl.maxY - cl.minY);
+      rectEl.setAttribute('rx', 14);
+      rectEl.setAttribute('ry', 14);
+      rectEl.setAttribute('fill', fillColor);
+      rectEl.setAttribute('stroke', strokeColor);
+      rectEl.setAttribute('stroke-width', '2');
+      rectEl.setAttribute('class', 'kmap-circle-rect');
+      svg.appendChild(rectEl);
+    });
+
+    const sorted = [...clusters].sort((a, b) => (a.minX === b.minX ? a.minY - b.minY : a.minX - b.minX));
+    for (let i = 0; i < sorted.length - 1; i += 1) {
+      const start = sorted[i];
+      const end = sorted[i + 1];
+      const dx = end.cx - start.cx;
+      const dy = end.cy - start.cy;
+      const dist = Math.hypot(dx, dy) || 1;
+      const offset = Math.min(40, dist / 3);
+      const cx = (start.cx + end.cx) / 2 - (dy / dist) * offset;
+      const cy = (start.cy + end.cy) / 2 + (dx / dist) * offset;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${start.cx} ${start.cy} Q ${cx} ${cy} ${end.cx} ${end.cy}`);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', strokeColor);
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('stroke-dasharray', '8 6');
+      path.setAttribute('class', 'kmap-circle-link');
+      svg.appendChild(path);
+    }
+  });
+}
+
+function scheduleKmapCircleRender() {
+  requestAnimationFrame(renderKmapCircles);
+}
+
+function syncKmapCircleToggleLabel() {
+  if (!kmapCircleToggle) return;
+  kmapCircleToggle.textContent = showKmapCircles ? 'Hide Circles' : 'Show Circles';
+}
+
 function buildKmapCornerLabel(layout) {
   const corner = document.createElement('div');
   corner.className = 'kmap-corner-label';
@@ -2134,6 +2310,8 @@ function renderKmaps() {
     `;
     card.appendChild(meta);
 
+    const gridWrapper = document.createElement('div');
+    gridWrapper.className = 'kmap-grid-wrapper';
     const gridCollection = document.createElement('div');
     gridCollection.className = 'kmap-grid-collection';
     gridCollection.style.gridTemplateColumns = `repeat(${layout.mapCols}, minmax(${layout.baseCols * 60 + 90}px, 1fr))`;
@@ -2151,7 +2329,12 @@ function renderKmaps() {
       gridCollection.appendChild(submap);
     });
 
-    card.appendChild(gridCollection);
+    const overlay = document.createElement('div');
+    overlay.className = 'kmap-circle-overlay';
+
+    gridWrapper.appendChild(gridCollection);
+    gridWrapper.appendChild(overlay);
+    card.appendChild(gridWrapper);
 
     const expressionRow = document.createElement('div');
     expressionRow.className = 'kmap-expression';
@@ -2210,6 +2393,9 @@ function renderKmaps() {
     card.appendChild(expressionRow);
     kmapList.appendChild(card);
   });
+
+  syncKmapCircleToggleLabel();
+  scheduleKmapCircleRender();
 }
 
 function openKmapWindow() {
@@ -2719,6 +2905,13 @@ function attachEvents() {
     if (kmapWindow.classList.contains('hidden')) showKmapWorkspace();
     else closeKmapWindow();
   });
+  if (kmapCircleToggle) {
+    kmapCircleToggle.addEventListener('click', () => {
+      showKmapCircles = !showKmapCircles;
+      syncKmapCircleToggleLabel();
+      scheduleKmapCircleRender();
+    });
+  }
   document.getElementById('testKmapBtn').addEventListener('click', showKmapExportTest);
   document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
   document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
@@ -2840,6 +3033,7 @@ function attachEvents() {
 
   window.addEventListener('resize', () => {
     updateDrawerWidth(drawerWidth);
+    scheduleKmapCircleRender();
   });
 
   window.addEventListener('beforeunload', (e) => {
