@@ -65,6 +65,8 @@ const kmapList = document.getElementById('kmapList');
 const kmapEmptyState = document.getElementById('kmapEmptyState');
 const kmapZipStatus = document.getElementById('kmapZipStatus');
 const kmapCircleToggle = document.getElementById('toggleKmapCircles');
+const kmapQuickRefBtn = document.getElementById('kmapQuickRef');
+const kmapQuickRefDialog = document.getElementById('kmapQuickRefDialog');
 const confirmKmapCreate = document.getElementById('confirmKmapCreate');
 const kmapLabelInput = document.getElementById('kmapLabel');
 const kmapVariablesInput = document.getElementById('kmapVariables');
@@ -79,6 +81,7 @@ let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizo
 let kmapExpressionDragState = null;
 let transitionColumnDragState = null;
 let showKmapCircles = false;
+let showKmapCirclesBeforeResize = false;
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 const kmapCirclePalette = ['#2563eb', '#d946ef', '#22c55e', '#f97316', '#14b8a6', '#f59e0b'];
 
@@ -2311,6 +2314,18 @@ function scheduleKmapCircleRender() {
   requestAnimationFrame(renderKmapCircles);
 }
 
+function setShowKmapCircles(value) {
+  const next = !!value;
+  if (showKmapCircles === next) return;
+  showKmapCircles = next;
+  syncKmapCircleToggleLabel();
+  scheduleKmapCircleRender();
+}
+
+function toggleKmapCircles() {
+  setShowKmapCircles(!showKmapCircles);
+}
+
 function syncKmapCircleToggleLabel() {
   if (!kmapCircleToggle) return;
   kmapCircleToggle.textContent = showKmapCircles ? 'Hide Circles' : 'Show Circles';
@@ -3017,10 +3032,13 @@ function attachEvents() {
     else closeKmapWindow();
   });
   if (kmapCircleToggle) {
-    kmapCircleToggle.addEventListener('click', () => {
-      showKmapCircles = !showKmapCircles;
-      syncKmapCircleToggleLabel();
-      scheduleKmapCircleRender();
+    kmapCircleToggle.addEventListener('click', toggleKmapCircles);
+  }
+  if (kmapQuickRefBtn && kmapQuickRefDialog) {
+    kmapQuickRefBtn.addEventListener('click', () => {
+      const isHidden = kmapQuickRefDialog.classList.contains('hidden');
+      if (isHidden) openDialog('kmapQuickRefDialog');
+      else closeDialog('kmapQuickRefDialog');
     });
   }
   document.getElementById('testKmapBtn').addEventListener('click', showKmapExportTest);
@@ -3058,6 +3076,8 @@ function attachEvents() {
     const startY = e.clientY;
     const startWidth = rect.width;
     const startHeight = rect.height;
+    showKmapCirclesBeforeResize = showKmapCircles;
+    if (showKmapCirclesBeforeResize) setShowKmapCircles(false);
     const resizeHandler = (ev) => {
       const newWidth = Math.max(520, Math.min(window.innerWidth - rect.left - 12, startWidth + (ev.clientX - startX)));
       const newHeight = Math.max(320, Math.min(window.innerHeight - rect.top - 12, startHeight + (ev.clientY - startY)));
@@ -3069,6 +3089,10 @@ function attachEvents() {
     const stopResize = () => {
       document.removeEventListener('mousemove', resizeHandler);
       document.removeEventListener('mouseup', stopResize);
+      if (showKmapCirclesBeforeResize) {
+        setShowKmapCircles(true);
+        showKmapCirclesBeforeResize = false;
+      }
     };
     document.addEventListener('mousemove', resizeHandler);
     document.addEventListener('mouseup', stopResize);

@@ -239,6 +239,7 @@
     <div class="kmap-window-header" id="kmapWindowHeader">
       <div class="kmap-window-title">K-map Workspace</div>
       <div class="kmap-window-actions">
+        <button id="kmapQuickRef" class="ghost" aria-label="Open k-map quick reference">?</button>
         <button id="newKmapBtn" class="primary">Create new k-map</button>
         <button id="toggleKmapCircles" class="ghost">Show Circles</button>
         <button id="closeKmapWindow" aria-label="Close k-map window">✕</button>
@@ -278,6 +279,22 @@
         <div class="dialog-actions">
           <button id="confirmKmapCreate" class="primary" disabled>OK</button>
           <button data-close="kmapCreateDialog">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="kmapQuickRefDialog" class="dialog-backdrop hidden">
+      <div class="dialog">
+        <h2>K-map Quick Reference</h2>
+        <ul>
+          <li><b>Create</b> a map with <i>Create new k-map</i> and pick variables and format.</li>
+          <li><b>Drag</b> expressions into the trays to build rows and columns.</li>
+          <li><b>Click</b> each cell to cycle between <b>1</b>, <b>0</b>, and <b>X</b> (don’t care).</li>
+          <li><b>Toggle circles</b> with <i>Show/Hide Circles</i> to visualize groupings.</li>
+          <li><b>Resize</b> the window from the corner handle; circles will refresh afterward.</li>
+        </ul>
+        <div class="dialog-actions">
+          <button data-close="kmapQuickRefDialog">Close</button>
         </div>
       </div>
     </div>
