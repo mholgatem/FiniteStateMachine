@@ -2215,14 +2215,23 @@ function splitExpressionSections(tokens = []) {
   return sections;
 }
 
-function renderKmapCircles() {
-  document.querySelectorAll('.kmap-circle-overlay').forEach((ov) => {
-    ov.innerHTML = '';
-    ov.classList.toggle('hidden', !showKmapCircles);
-  });
-  if (!showKmapCircles) return;
+function renderKmapCircles(root = null) {
+  const context = root || document;
 
-  const cards = Array.from(kmapList?.querySelectorAll('.kmap-card') || []);
+  context.querySelectorAll('.kmap-circle-overlay').forEach((ov) => {
+    ov.innerHTML = '';
+    ov.classList.toggle('hidden', !showKmapCircles && !root);
+  });
+  if (!showKmapCircles && !root) return;
+
+  let cards;
+  if (root) {
+    cards = root.classList.contains('kmap-card')
+      ? [root]
+      : Array.from(root.querySelectorAll('.kmap-card'));
+  } else {
+    cards = Array.from(kmapList?.querySelectorAll('.kmap-card') || []);
+  }
   cards.forEach((card) => {
     const kmap = getKmapById(card.dataset.kmapId);
     if (!kmap || !kmap.expression) return;
@@ -2861,16 +2870,16 @@ async function captureKmapImagesZip() {
 
   try {
     for (const card of cards) {
-      const kmap = getKmapById(card.dataset.kmapId);
-      if (!kmap) continue;
+    const kmap = getKmapById(card.dataset.kmapId);
+    if (!kmap) continue;
 
-      const { wrapper, clone } = buildKmapExportClone(card, kmap);
-      document.body.appendChild(wrapper);
-      if (shouldRenderCircles) {
-        renderKmapCircles();
-        await new Promise(requestAnimationFrame);
-      }
+    const { wrapper, clone } = buildKmapExportClone(card, kmap);
+    document.body.appendChild(wrapper);
+    if (shouldRenderCircles) {
+      renderKmapCircles(clone);
       await new Promise(requestAnimationFrame);
+    }
+    await new Promise(requestAnimationFrame);
 
       const width = clone.scrollWidth;
       const height = clone.scrollHeight;
