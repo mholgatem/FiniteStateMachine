@@ -544,12 +544,13 @@ function ensureTransitionTableStructure() {
       const template = templateMap.get(baseKey);
       if (!template) return null;
       const key = (col.key && col.key.startsWith(baseKey)) ? col.key : `${baseKey}__${uniqueId('col')}`;
+      const label = baseKey.startsWith('out_') ? template.label : col.label || template.label;
       return {
         ...template,
         ...col,
         baseKey,
         key,
-        label: col.label || template.label,
+        label,
         type: template.type,
       };
     })
@@ -3286,9 +3287,19 @@ function attachEvents() {
 
   document.getElementById('outputsControl').addEventListener('change', (e) => {
     const newOutputs = parseList(e.target.value);
+    const lengthChanged = newOutputs.length !== state.outputs.length;
     if (newOutputs.join(',') === state.outputs.join(',')) {
       e.target.value = state.outputs.join(', ');
       return;
+    }
+    if (lengthChanged && hasTransitionTableValues()) {
+      const proceed = window.confirm(
+        'Changing the number of outputs will reset your State Transition Table. Proceed?',
+      );
+      if (!proceed) {
+        e.target.value = state.outputs.join(', ');
+        return;
+      }
     }
     const previousOutputs = state.outputs.slice();
     const savedStateOutputs = state.states.map((s) => {
@@ -3301,11 +3312,7 @@ function attachEvents() {
       while (existing.length < previousOutputs.length) existing.push('X');
       return existing;
     });
-    if (!confirmTransitionTableReset('outputs')) {
-      e.target.value = state.outputs.join(', ');
-      return;
-    }
-    state.transitionTable = { cells: {} };
+    if (lengthChanged) state.transitionTable = { cells: {} };
     state.outputs = newOutputs;
     e.target.value = state.outputs.join(', ');
     state.states.forEach((s, idx) => {
