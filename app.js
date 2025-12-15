@@ -2243,7 +2243,7 @@ function renderKmapCircles() {
       const canonical = tokensToCanonical(sectionTokens);
       const sectionTable = buildExpressionTruthTable(canonical, variables);
       if (!sectionTable) return;
-      const padding = 8;
+      const padding = -4;
       const activeCells = cells
         .map((cell) => {
           if (sectionTable.get(cell.key) !== '1') return null;
