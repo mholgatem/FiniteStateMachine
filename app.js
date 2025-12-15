@@ -2125,7 +2125,9 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
   const visited = new Set();
   const byPosition = new Map();
 
-  cells.forEach((cell, idx) => {
+  cells.forEach((entry, idx) => {
+    // Each entry is { rect, cell }; use the logical cell for adjacency checks
+    const { cell } = entry;
     const key = `${cell.submap?.mapRow || 0}-${cell.submap?.mapCol || 0}-${cell.row}-${cell.col}`;
     byPosition.set(key, { idx, cell });
   });
@@ -2175,20 +2177,11 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
     if (!visited.has(idx)) addCluster(idx);
   });
 
-  const merged = clusters.map((rectList) => {
-    const base = rectList.reduce(
-      (acc, rect) => ({
-        minX: Math.min(acc.minX, rect.minX),
-        minY: Math.min(acc.minY, rect.minY),
-        maxX: Math.max(acc.maxX, rect.maxX),
-        maxY: Math.max(acc.maxY, rect.maxY),
-      }),
-      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-    );
-    return { ...base, boxes: rectList };
-  });
+  // Preserve the logical clusters, then group purely by spatial distance so wrapping
+  // cells don't merge into a single bounding box unless they are actually adjacent.
+  const flatRects = clusters.flat();
 
-  return clusterRects(merged, threshold);
+  return clusterRects(flatRects, threshold);
 }
 
 function splitExpressionSections(tokens = []) {
