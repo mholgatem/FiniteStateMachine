@@ -3290,6 +3290,17 @@ function attachEvents() {
       e.target.value = state.outputs.join(', ');
       return;
     }
+    const previousOutputs = state.outputs.slice();
+    const savedStateOutputs = state.states.map((s) => {
+      const existing = Array.isArray(s.outputs) ? s.outputs.slice(0, previousOutputs.length) : [];
+      while (existing.length < previousOutputs.length) existing.push('0');
+      return existing;
+    });
+    const savedTransitionOutputs = state.transitions.map((t) => {
+      const existing = Array.isArray(t.outputValues) ? t.outputValues.slice(0, previousOutputs.length) : [];
+      while (existing.length < previousOutputs.length) existing.push('X');
+      return existing;
+    });
     if (!confirmTransitionTableReset('outputs')) {
       e.target.value = state.outputs.join(', ');
       return;
@@ -3297,10 +3308,17 @@ function attachEvents() {
     state.transitionTable = { cells: {} };
     state.outputs = newOutputs;
     e.target.value = state.outputs.join(', ');
-    state.states.forEach((s) => (s.outputs = state.outputs.map(() => '0')));
-    state.transitions.forEach((t) => {
-      t.outputValues = (t.outputValues || []).slice(0, state.outputs.length);
-      while (t.outputValues.length < state.outputs.length) t.outputValues.push('X');
+    state.states.forEach((s, idx) => {
+      const preserved = savedStateOutputs[idx] || [];
+      const nextOutputs = preserved.slice(0, state.outputs.length);
+      while (nextOutputs.length < state.outputs.length) nextOutputs.push(state.type === 'mealy' ? 'X' : '0');
+      s.outputs = nextOutputs;
+    });
+    state.transitions.forEach((t, idx) => {
+      const preserved = savedTransitionOutputs[idx] || [];
+      const nextOutputs = preserved.slice(0, state.outputs.length);
+      while (nextOutputs.length < state.outputs.length) nextOutputs.push(state.type === 'mealy' ? 'X' : '0');
+      t.outputValues = nextOutputs;
       t.outputs = selectionLabel(state.outputs, t.outputValues);
     });
     renderTable();
