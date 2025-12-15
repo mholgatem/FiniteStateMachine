@@ -184,6 +184,7 @@
     <div class="drawer-header">
       <h4>State Transition Table</h4>
       <div class="drawer-header-actions">
+        <button id="transitionTableHelp" class="ghost" aria-label="Transition table quick reference">?</button>
         <button id="verifyTransitionTable" class="ghost">Verify Transition Table</button>
         <button id="closeTransitionDrawer" class="ghost" aria-label="Close transition table">✕</button>
       </div>
@@ -231,6 +232,21 @@
       </ul>
       <div class="dialog-actions">
         <button data-close="quickRefDialog">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="transitionTableHelpDialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <h2>Transition Table Quick Reference</h2>
+      <ul>
+        <li>Drag and drop columns in the Column Builder to arrange your transition table order.</li>
+        <li><i>Current state</i> and <i>input</i> columns accept only <b>1</b> or <b>0</b>.</li>
+        <li><i>Next state</i> and <i>output</i> columns accept <b>1</b>, <b>0</b>, or <b>X</b> (don’t care).</li>
+        <li class="spaced-bullet"><b>Verify Transition Table Button</b> checks the table against the Transition Diagram only—it does not validate the correctness of your logic.</li>
+      </ul>
+      <div class="dialog-actions">
+        <button data-close="transitionTableHelpDialog">Close</button>
       </div>
     </div>
   </div>
