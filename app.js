@@ -2247,7 +2247,10 @@ function renderKmapCircles() {
       const activeCells = cells
         .map((cell) => {
           if (sectionTable.get(cell.key) !== '1') return null;
-          const rect = cell.element.getBoundingClientRect();
+          // Use the parent cell (td) dimensions so adjacent cells physically touch.
+          // This ensures the gap is 0px, guaranteeing a merge.
+          const target = cell.element.closest('td') || cell.element.parentElement;
+          const rect = target.getBoundingClientRect();
           return {
             rect: {
               minX: rect.left - overlayRect.left - padding,
