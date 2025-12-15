@@ -410,7 +410,7 @@ function updateControls() {
     el.classList.toggle('hidden', state.type !== 'moore');
   });
   toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
-  toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
+  toggleIoModeBtn.textContent = `Display: ${state.showBinary ? 'Variables' : 'Binary'}`;
 }
 
 function renderPalette() {
@@ -3242,7 +3242,7 @@ function attachEvents() {
 
   toggleIoModeBtn.addEventListener('click', () => {
     state.showBinary = !state.showBinary;
-    toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
+    toggleIoModeBtn.textContent = `Display: ${state.showBinary ? 'Variables' : 'Binary'}`;
     renderPalette();
     renderDiagram();
     markDirty();
