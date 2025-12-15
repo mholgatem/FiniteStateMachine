@@ -2506,6 +2506,7 @@ function renderKmaps() {
     verifyBtn.textContent = 'Verify';
     verifyBtn.type = 'button';
     verifyBtn.dataset.verifyKmap = kmap.id;
+    verifyBtn.hidden = true;
     controls.appendChild(verifyBtn);
 
     const removeBtn = document.createElement('button');
@@ -2837,7 +2838,12 @@ async function captureKmapImagesZip() {
     return;
   }
 
+  const shouldRenderCircles = showKmapCircles;
   renderKmaps();
+  if (shouldRenderCircles) {
+    renderKmapCircles();
+    await new Promise(requestAnimationFrame);
+  }
   const cards = Array.from(kmapList.querySelectorAll('.kmap-card'));
   if (!cards.length) return;
 
