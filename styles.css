@@ -256,7 +256,7 @@ body {
 
 .transition-token.transition-spacer,
 .transition-column-token.transition-spacer-token {
-  min-width: 32px;
+  min-width: 10px;
   min-height: 32px;
 }
 
@@ -943,6 +943,7 @@ svg text {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
+  justify-content: center;
 }
 
 .kmap-expr-token.selected {
@@ -1010,6 +1011,8 @@ svg text {
   background: cornflowerblue;
   color: #fff;
   border-color: var(--border);
+  padding: 0 5px;
+  min-width: 32px;
 }
 
 .transition-column-token.transition-spacer-token {

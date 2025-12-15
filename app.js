@@ -51,6 +51,8 @@ const transitionTableHead = document.getElementById('transitionTableHead');
 const transitionTableBody = document.getElementById('transitionTableBody');
 const transitionColumnTray = document.getElementById('transitionColumnTray');
 const transitionColumnDropzone = document.getElementById('transitionColumnDropzone');
+const transitionTableHelpBtn = document.getElementById('transitionTableHelp');
+const transitionTableHelpDialog = document.getElementById('transitionTableHelpDialog');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const fileMenu = document.getElementById('fileMenu');
@@ -210,13 +212,7 @@ function promptToSaveIfDirty(next) {
     next();
     return;
   }
-  const wantsSave = window.confirm('You have unsaved changes. Save before continuing?');
-  if (wantsSave) {
-    saveState();
-    next();
-    return;
-  }
-  const proceed = window.confirm('Continue without saving?');
+  const proceed = window.confirm('Continue without saving? Unsaved changes will be lost.');
   if (proceed) next();
 }
 
@@ -3052,6 +3048,9 @@ function attachEvents() {
     promptToSaveIfDirty(() => openDialog('newMachineDialog'));
   });
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
+  if (transitionTableHelpBtn && transitionTableHelpDialog) {
+    transitionTableHelpBtn.addEventListener('click', () => openDialog('transitionTableHelpDialog'));
+  }
   if (toggleTransitionBuilderBtn && transitionColumnBuilder) {
     toggleTransitionBuilderBtn.addEventListener('click', () => {
       const collapsed = transitionColumnBuilder.classList.toggle('collapsed');
