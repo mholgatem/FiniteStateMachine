@@ -410,7 +410,7 @@ function updateControls() {
     el.classList.toggle('hidden', state.type !== 'moore');
   });
   toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
-  toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
+  toggleIoModeBtn.textContent = `Display: ${state.showBinary ? 'Variables' : 'Binary'}`;
 }
 
 function renderPalette() {
@@ -544,12 +544,13 @@ function ensureTransitionTableStructure() {
       const template = templateMap.get(baseKey);
       if (!template) return null;
       const key = (col.key && col.key.startsWith(baseKey)) ? col.key : `${baseKey}__${uniqueId('col')}`;
+      const label = baseKey.startsWith('out_') ? template.label : col.label || template.label;
       return {
         ...template,
         ...col,
         baseKey,
         key,
-        label: col.label || template.label,
+        label,
         type: template.type,
       };
     })
@@ -3242,7 +3243,7 @@ function attachEvents() {
 
   toggleIoModeBtn.addEventListener('click', () => {
     state.showBinary = !state.showBinary;
-    toggleIoModeBtn.textContent = `Show: ${state.showBinary ? 'Binary' : 'Vars'}`;
+    toggleIoModeBtn.textContent = `Display: ${state.showBinary ? 'Variables' : 'Binary'}`;
     renderPalette();
     renderDiagram();
     markDirty();
@@ -3286,21 +3287,45 @@ function attachEvents() {
 
   document.getElementById('outputsControl').addEventListener('change', (e) => {
     const newOutputs = parseList(e.target.value);
+    const lengthChanged = newOutputs.length !== state.outputs.length;
     if (newOutputs.join(',') === state.outputs.join(',')) {
       e.target.value = state.outputs.join(', ');
       return;
     }
-    if (!confirmTransitionTableReset('outputs')) {
-      e.target.value = state.outputs.join(', ');
-      return;
+    if (lengthChanged && hasTransitionTableValues()) {
+      const proceed = window.confirm(
+        'Changing the number of outputs will reset your State Transition Table. Proceed?',
+      );
+      if (!proceed) {
+        e.target.value = state.outputs.join(', ');
+        return;
+      }
     }
-    state.transitionTable = { cells: {} };
+    const previousOutputs = state.outputs.slice();
+    const savedStateOutputs = state.states.map((s) => {
+      const existing = Array.isArray(s.outputs) ? s.outputs.slice(0, previousOutputs.length) : [];
+      while (existing.length < previousOutputs.length) existing.push('0');
+      return existing;
+    });
+    const savedTransitionOutputs = state.transitions.map((t) => {
+      const existing = Array.isArray(t.outputValues) ? t.outputValues.slice(0, previousOutputs.length) : [];
+      while (existing.length < previousOutputs.length) existing.push('X');
+      return existing;
+    });
+    if (lengthChanged) state.transitionTable = { cells: {} };
     state.outputs = newOutputs;
     e.target.value = state.outputs.join(', ');
-    state.states.forEach((s) => (s.outputs = state.outputs.map(() => '0')));
-    state.transitions.forEach((t) => {
-      t.outputValues = (t.outputValues || []).slice(0, state.outputs.length);
-      while (t.outputValues.length < state.outputs.length) t.outputValues.push('X');
+    state.states.forEach((s, idx) => {
+      const preserved = savedStateOutputs[idx] || [];
+      const nextOutputs = preserved.slice(0, state.outputs.length);
+      while (nextOutputs.length < state.outputs.length) nextOutputs.push(state.type === 'mealy' ? 'X' : '0');
+      s.outputs = nextOutputs;
+    });
+    state.transitions.forEach((t, idx) => {
+      const preserved = savedTransitionOutputs[idx] || [];
+      const nextOutputs = preserved.slice(0, state.outputs.length);
+      while (nextOutputs.length < state.outputs.length) nextOutputs.push(state.type === 'mealy' ? 'X' : '0');
+      t.outputValues = nextOutputs;
       t.outputs = selectionLabel(state.outputs, t.outputValues);
     });
     renderTable();
