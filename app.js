@@ -2116,6 +2116,81 @@ function clusterRects(rects, threshold = 28) {
   return clusters;
 }
 
+function clusterCellsWithWrap(cells, layout, threshold = 28) {
+  if (!cells?.length) return [];
+
+  const baseRows = layout?.baseRows || 1;
+  const baseCols = layout?.baseCols || 1;
+  const clusters = [];
+  const visited = new Set();
+  const byPosition = new Map();
+
+  cells.forEach((cell, idx) => {
+    const key = `${cell.submap?.mapRow || 0}-${cell.submap?.mapCol || 0}-${cell.row}-${cell.col}`;
+    byPosition.set(key, { idx, cell });
+  });
+
+  const findNeighbor = (sub, row, col) => {
+    const key = `${sub?.mapRow || 0}-${sub?.mapCol || 0}-${row}-${col}`;
+    return byPosition.get(key)?.idx;
+  };
+
+  const neighbors = (cell) => {
+    const { submap, row, col } = cell;
+    const localRow = row - (submap?.rowOffset || 0);
+    const localCol = col - (submap?.colOffset || 0);
+    const upRow = ((localRow - 1 + baseRows) % baseRows) + (submap?.rowOffset || 0);
+    const downRow = ((localRow + 1) % baseRows) + (submap?.rowOffset || 0);
+    const leftCol = ((localCol - 1 + baseCols) % baseCols) + (submap?.colOffset || 0);
+    const rightCol = ((localCol + 1) % baseCols) + (submap?.colOffset || 0);
+    return [
+      findNeighbor(submap, upRow, col),
+      findNeighbor(submap, downRow, col),
+      findNeighbor(submap, row, leftCol),
+      findNeighbor(submap, row, rightCol),
+    ].filter((v) => v !== undefined);
+  };
+
+  const stack = [];
+  const addCluster = (seedIdx) => {
+    stack.length = 0;
+    stack.push(seedIdx);
+    const rects = [];
+    visited.add(seedIdx);
+    while (stack.length) {
+      const idx = stack.pop();
+      const { rect, cell } = cells[idx];
+      rects.push(rect);
+      neighbors(cell).forEach((nIdx) => {
+        if (!visited.has(nIdx)) {
+          visited.add(nIdx);
+          stack.push(nIdx);
+        }
+      });
+    }
+    clusters.push(rects);
+  };
+
+  cells.forEach((entry, idx) => {
+    if (!visited.has(idx)) addCluster(idx);
+  });
+
+  const merged = clusters.map((rectList) => {
+    const base = rectList.reduce(
+      (acc, rect) => ({
+        minX: Math.min(acc.minX, rect.minX),
+        minY: Math.min(acc.minY, rect.minY),
+        maxX: Math.max(acc.maxX, rect.maxX),
+        maxY: Math.max(acc.maxY, rect.maxY),
+      }),
+      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+    );
+    return { ...base, boxes: rectList };
+  });
+
+  return clusterRects(merged, threshold);
+}
+
 function splitExpressionSections(tokens = []) {
   const sections = [];
   let depth = 0;
@@ -2176,22 +2251,25 @@ function renderKmapCircles() {
       const sectionTable = buildExpressionTruthTable(canonical, variables);
       if (!sectionTable) return;
       const padding = 8;
-      const activeRects = cells
+      const activeCells = cells
         .map((cell) => {
           if (sectionTable.get(cell.key) !== '1') return null;
           const rect = cell.element.getBoundingClientRect();
           return {
-            minX: rect.left - overlayRect.left - padding,
-            minY: rect.top - overlayRect.top - padding,
-            maxX: rect.right - overlayRect.left + padding,
-            maxY: rect.bottom - overlayRect.top + padding,
+            rect: {
+              minX: rect.left - overlayRect.left - padding,
+              minY: rect.top - overlayRect.top - padding,
+              maxX: rect.right - overlayRect.left + padding,
+              maxY: rect.bottom - overlayRect.top + padding,
+            },
+            cell,
           };
         })
         .filter(Boolean);
 
-      if (!activeRects.length) return;
+      if (!activeCells.length) return;
 
-      const clusters = clusterRects(activeRects, 32);
+      const clusters = clusterCellsWithWrap(activeCells, layout, 32);
       const strokeColor = kmapCirclePalette[(paletteOffset + sectionIdx) % kmapCirclePalette.length];
       const fillColor = colorWithAlpha(strokeColor, 0.12);
 
