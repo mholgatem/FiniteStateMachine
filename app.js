@@ -2839,6 +2839,12 @@ async function captureKmapImagesZip() {
   }
 
   const shouldRenderCircles = showKmapCircles;
+  const wasWindowHidden = kmapWindow?.classList.contains('hidden');
+  const previousVisibility = kmapWindow?.style.visibility;
+  if (kmapWindow && wasWindowHidden) {
+    kmapWindow.classList.remove('hidden');
+    kmapWindow.style.visibility = 'hidden';
+  }
   renderKmaps();
   if (shouldRenderCircles) {
     renderKmapCircles();
@@ -2860,6 +2866,10 @@ async function captureKmapImagesZip() {
 
       const { wrapper, clone } = buildKmapExportClone(card, kmap);
       document.body.appendChild(wrapper);
+      if (shouldRenderCircles) {
+        renderKmapCircles();
+        await new Promise(requestAnimationFrame);
+      }
       await new Promise(requestAnimationFrame);
 
       const width = clone.scrollWidth;
@@ -2888,6 +2898,13 @@ async function captureKmapImagesZip() {
   } finally {
     if (kmapZipStatus) {
       kmapZipStatus.classList.add('hidden');
+    }
+    if (shouldRenderCircles) {
+      renderKmapCircles();
+    }
+    if (kmapWindow && wasWindowHidden) {
+      kmapWindow.classList.add('hidden');
+      kmapWindow.style.visibility = previousVisibility || '';
     }
   }
 }
