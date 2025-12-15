@@ -22,6 +22,7 @@ let viewState = { scale: 1, panX: 0, panY: 0 };
 let unsavedChanges = false;
 let drawerWidth = 520;
 let isPanning = false;
+let panWithShift = false;
 let panStart = { x: 0, y: 0 };
 let transitionTableValueColumns = [];
 let transitionTableGroupSize = 0;
@@ -52,12 +53,17 @@ const transitionColumnTray = document.getElementById('transitionColumnTray');
 const transitionColumnDropzone = document.getElementById('transitionColumnDropzone');
 const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
+const fileMenu = document.getElementById('fileMenu');
+const fileMenuButton = document.getElementById('fileMenuButton');
+const settingsMenu = document.getElementById('settingsMenu');
+const settingsMenuButton = document.getElementById('settingsMenuButton');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
 const toolbarNewMachine = document.getElementById('toolbarNewMachine');
 const kmapWindow = document.getElementById('kmapWindow');
 const kmapWindowHeader = document.getElementById('kmapWindowHeader');
 const kmapList = document.getElementById('kmapList');
 const kmapEmptyState = document.getElementById('kmapEmptyState');
+const kmapZipStatus = document.getElementById('kmapZipStatus');
 const confirmKmapCreate = document.getElementById('confirmKmapCreate');
 const kmapLabelInput = document.getElementById('kmapLabel');
 const kmapVariablesInput = document.getElementById('kmapVariables');
@@ -100,6 +106,13 @@ function closeDialog(id) {
 
 function openDialog(id) {
   document.getElementById(id).classList.remove('hidden');
+}
+
+function closeAllDropdowns(options = {}) {
+  const { keepFile = false } = options;
+  saveImageMenu.classList.add('hidden');
+  settingsMenu.classList.add('hidden');
+  if (!keepFile) fileMenu.classList.add('hidden');
 }
 
 function columnBaseKey(col) {
@@ -1277,6 +1290,12 @@ function download(filename, content) {
   link.click();
 }
 
+function sanitizeFilename(name, fallback = 'kmap') {
+  const base = (name || fallback).toString().trim();
+  const cleaned = base.replace(/[^a-z0-9_-]+/gi, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned || fallback;
+}
+
 function saveState() {
   ensureTransitionTableStructure();
   const payload = JSON.stringify(state, null, 2);
@@ -2096,6 +2115,7 @@ function renderKmaps() {
   state.kmaps.forEach((kmap) => {
     const card = document.createElement('div');
     card.className = 'kmap-card';
+    card.dataset.kmapId = kmap.id;
     const layout = buildKmapLayout(kmap);
     card.dataset.totalRows = layout.totalRows;
     card.dataset.totalCols = layout.totalCols;
@@ -2423,6 +2443,137 @@ async function captureTransitionDrawerImage() {
   if (!wasOpen) closeTransitionDrawer();
 }
 
+function buildKmapExportClone(card, kmap) {
+  const clone = card.cloneNode(true);
+  const kmapBody = kmapWindow?.querySelector('.kmap-window-body');
+  const declaredWidth = kmapWindow ? parseFloat(kmapWindow.style.width || '0') || 0 : 0;
+  const windowRect = kmapWindow?.getBoundingClientRect();
+  const bodyRect = kmapBody?.getBoundingClientRect();
+  const exportWidth = Math.max(
+    windowRect?.width || 0,
+    bodyRect?.width || 0,
+    kmapWindow?.scrollWidth || 0,
+    declaredWidth,
+    kmapWindowState?.width || 0,
+    card.scrollWidth || 0,
+    card.getBoundingClientRect().width || 0,
+    840,
+  );
+
+  clone.style.width = `${exportWidth}px`;
+  clone.style.maxWidth = `${exportWidth}px`;
+  clone.classList.add('exporting');
+
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'fixed';
+  wrapper.style.left = '0';
+  wrapper.style.top = '0';
+  wrapper.style.width = `${exportWidth}px`;
+  wrapper.style.opacity = '0';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.background = '#fff';
+  wrapper.style.zIndex = '9999';
+  wrapper.appendChild(clone);
+
+  return { wrapper, clone };
+}
+
+function showKmapExportTest() {
+  renderKmaps();
+  const firstCard = kmapList?.querySelector('.kmap-card');
+  if (!firstCard) {
+    window.alert('No k-maps available to test.');
+    return;
+  }
+
+  const kmap = getKmapById(firstCard.dataset.kmapId);
+  if (!kmap) {
+    window.alert('Unable to locate the first k-map.');
+    return;
+  }
+
+  const { clone } = buildKmapExportClone(firstCard, kmap);
+  const overlay = document.createElement('div');
+  overlay.className = 'kmap-test-overlay';
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  const frame = document.createElement('div');
+  frame.className = 'kmap-test-frame';
+
+  const header = document.createElement('div');
+  header.className = 'kmap-test-frame-header';
+  const title = document.createElement('div');
+  title.textContent = 'K-map export clone preview';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'ghost';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  header.append(title, closeBtn);
+
+  frame.append(header, clone);
+  overlay.appendChild(frame);
+  document.body.appendChild(overlay);
+}
+
+async function captureKmapImagesZip() {
+  if (!state.kmaps.length) return;
+  if (typeof JSZip === 'undefined') {
+    window.alert('Unable to export k-maps because the ZIP library is unavailable.');
+    return;
+  }
+
+  renderKmaps();
+  const cards = Array.from(kmapList.querySelectorAll('.kmap-card'));
+  if (!cards.length) return;
+
+  const zip = new JSZip();
+
+  if (kmapZipStatus) {
+    kmapZipStatus.classList.remove('hidden');
+  }
+
+  try {
+    for (const card of cards) {
+      const kmap = getKmapById(card.dataset.kmapId);
+      if (!kmap) continue;
+
+      const { wrapper, clone } = buildKmapExportClone(card, kmap);
+      document.body.appendChild(wrapper);
+      await new Promise(requestAnimationFrame);
+
+      const width = clone.scrollWidth;
+      const height = clone.scrollHeight;
+
+      const canvas = await html2canvas(clone, {
+        backgroundColor: '#fff',
+        width,
+        height,
+        scale: window.devicePixelRatio || 1,
+        useCORS: true,
+      });
+
+      const url = canvas.toDataURL('image/png');
+      const base64 = url.split(',')[1];
+      const filename = `${sanitizeFilename(kmap.label || 'kmap')}.png`;
+      zip.file(filename, base64, { base64: true });
+
+      document.body.removeChild(wrapper);
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const zipUrl = URL.createObjectURL(blob);
+    download(`${sanitizeFilename(state.name || 'fsm')}-kmaps.zip`, zipUrl);
+    setTimeout(() => URL.revokeObjectURL(zipUrl), 1000);
+  } finally {
+    if (kmapZipStatus) {
+      kmapZipStatus.classList.add('hidden');
+    }
+  }
+}
+
 function applyViewTransform() {
   viewport.setAttribute(
     'transform',
@@ -2535,10 +2686,27 @@ function attachEvents() {
     btn.addEventListener('click', () => closeDialog(btn.dataset.close));
   });
 
+  fileMenuButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = fileMenu.classList.contains('hidden');
+    closeAllDropdowns();
+    if (willOpen) fileMenu.classList.remove('hidden');
+  });
+
+  settingsMenuButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = settingsMenu.classList.contains('hidden');
+    closeAllDropdowns();
+    if (willOpen) settingsMenu.classList.remove('hidden');
+  });
+
   document.getElementById('newMachineBtn').addEventListener('click', () =>
     promptToSaveIfDirty(() => openDialog('newMachineDialog'))
   );
-  toolbarNewMachine.addEventListener('click', () => promptToSaveIfDirty(() => openDialog('newMachineDialog')));
+  toolbarNewMachine.addEventListener('click', () => {
+    closeAllDropdowns();
+    promptToSaveIfDirty(() => openDialog('newMachineDialog'));
+  });
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
   if (toggleTransitionBuilderBtn && transitionColumnBuilder) {
     toggleTransitionBuilderBtn.addEventListener('click', () => {
@@ -2551,6 +2719,7 @@ function attachEvents() {
     if (kmapWindow.classList.contains('hidden')) showKmapWorkspace();
     else closeKmapWindow();
   });
+  document.getElementById('testKmapBtn').addEventListener('click', showKmapExportTest);
   document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
   document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
   confirmKmapCreate.addEventListener('click', createKmapFromDialog);
@@ -2644,6 +2813,7 @@ function attachEvents() {
       loadState(data);
     };
     reader.readAsText(file);
+    closeAllDropdowns();
   });
 
   document.getElementById('toggleTransitionDrawer').addEventListener('click', toggleTransitionDrawer);
@@ -2678,22 +2848,31 @@ function attachEvents() {
     e.returnValue = '';
   });
 
-  document.getElementById('saveButton').addEventListener('click', saveState);
+  document.getElementById('saveButton').addEventListener('click', () => {
+    closeAllDropdowns();
+    saveState();
+  });
   saveImageDropdown.addEventListener('click', (e) => {
     e.stopPropagation();
-    saveImageMenu.classList.toggle('hidden');
+    const willOpen = saveImageMenu.classList.contains('hidden');
+    closeAllDropdowns({ keepFile: true });
+    if (willOpen) saveImageMenu.classList.remove('hidden');
   });
   document.getElementById('saveImageTable').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureImage(tablePanel, `${state.name}-state-definition-table.png`);
   });
   document.getElementById('saveImageDiagram').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureImage(document.querySelector('.playmat'), `${state.name}-state-diagram.png`);
   });
   document.getElementById('saveImageTransitionTable').addEventListener('click', () => {
-    saveImageMenu.classList.add('hidden');
+    closeAllDropdowns();
     captureTransitionDrawerImage();
+  });
+  document.getElementById('saveImageKmaps').addEventListener('click', () => {
+    closeAllDropdowns();
+    captureKmapImagesZip();
   });
 
   toggleTableBtn.addEventListener('click', () => {
@@ -2707,11 +2886,13 @@ function attachEvents() {
     renderPalette();
     renderDiagram();
     markDirty();
+    settingsMenu.classList.add('hidden');
   });
 
   document.getElementById('toggleTheme').addEventListener('click', () => {
     document.body.classList.toggle('dark');
     document.body.classList.toggle('light');
+    settingsMenu.classList.add('hidden');
   });
 
   document.getElementById('nameControl').addEventListener('input', (e) => {
@@ -3218,8 +3399,9 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mousedown', (e) => {
-    if (e.button === 1) {
+    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
       isPanning = true;
+      panWithShift = e.button === 0 && e.shiftKey;
       panStart = { x: e.clientX, y: e.clientY };
       e.preventDefault();
       return;
@@ -3309,9 +3491,16 @@ function attachEvents() {
       const offsetX = st.x - start.x;
       const offsetY = st.y - start.y;
       const isResize = e.ctrlKey;
+      const startArrowWithAlt = e.button === 0 && e.altKey;
       let moved = false;
-      if (e.button === 2) {
-        currentArrow = { from: id, toPoint: getSVGPoint(e.clientX, e.clientY), arcOffset: 0 };
+      if (e.button === 2 || startArrowWithAlt) {
+        currentArrow = {
+          from: id,
+          toPoint: getSVGPoint(e.clientX, e.clientY),
+          arcOffset: 0,
+          startButton: e.button,
+          startWithAlt: startArrowWithAlt,
+        };
         renderDiagram();
         return;
       }
@@ -3340,7 +3529,7 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mouseup', (e) => {
-    if (currentArrow && e.button === 2) {
+    if (currentArrow && (e.button === currentArrow.startButton || (currentArrow.startWithAlt && e.button === 0))) {
       const targetState = e.target.closest('circle.state-node');
       if (targetState) {
         const toId = parseInt(targetState.parentNode.dataset.id, 10);
@@ -3423,8 +3612,8 @@ function attachEvents() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!saveImageMenu.contains(e.target) && e.target !== saveImageDropdown) {
-      saveImageMenu.classList.add('hidden');
+    if (!e.target.closest('.dropdown')) {
+      closeAllDropdowns();
     }
     if ((selectedArrowId || selectedStateId !== null) && !clickTargetsSelection(e.target)) {
       selectedArrowId = null;
@@ -3496,11 +3685,12 @@ function attachEvents() {
   });
 
   document.addEventListener('mouseup', (e) => {
-    if (e.button === 1 && isPanning) {
+    if (isPanning && (e.button === 1 || (panWithShift && e.button === 0))) {
       isPanning = false;
+      panWithShift = false;
       return;
     }
-    if (e.button === 2 && currentArrow) {
+    if (currentArrow && (e.button === 2 || (currentArrow.startWithAlt && e.button === 0))) {
       if (previewPath && previewPath.parentNode) {
         previewPath.parentNode.removeChild(previewPath);
       }
