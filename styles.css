@@ -690,7 +690,7 @@ svg text {
 
 .subscript {
   font-size: 0.8em;
-  baseline-shift: sub;
+  baseline-shift: -0.25em;
 }
 
 .overline {
