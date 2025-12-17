@@ -3816,7 +3816,9 @@ function attachEvents() {
   diagram.addEventListener('wheel', (e) => {
     e.preventDefault();
     const point = getSVGPoint(e.clientX, e.clientY);
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    const zoomIntensity = 0.0015;
+    const factor = Math.exp(-delta * zoomIntensity);
     const newScale = Math.min(3, Math.max(0.4, viewState.scale * factor));
     const scaleFactor = newScale / viewState.scale;
     viewState.panX = point.x - (point.x - viewState.panX) * scaleFactor;
