@@ -148,6 +148,12 @@ function clearVerificationStatus() {
   }
 }
 
+function setDefinitionTableExpanded(expanded) {
+  if (!tablePanel || !toggleTableBtn) return;
+  tablePanel.classList.toggle('collapsed', !expanded);
+  toggleTableBtn.textContent = expanded ? '▴' : '▾';
+}
+
 function setVerificationStatus(passed, message) {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
@@ -1332,13 +1338,13 @@ function loadState(data) {
   selectedStateId = null;
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
-  tablePanel.classList.add('collapsed');
   updateControls();
-  toggleTableBtn.textContent = '▾';
+  setDefinitionTableExpanded(false);
   renderTable();
   renderPalette();
   renderTransitionTable();
   renderDiagram();
+  focusDiagramOnContent({ margin: 100 });
   renderKmaps();
   verifyTransitionTableAgainstDiagram({ silent: true, recordStatus: false });
   clearDirty();
@@ -2922,6 +2928,41 @@ function applyViewTransform() {
   );
 }
 
+function focusDiagramOnContent(options = {}) {
+  const { margin = 160 } = options;
+  if (!diagram || !viewport || !viewport.hasChildNodes()) return;
+
+  let bounds;
+  try {
+    bounds = viewport.getBBox();
+  } catch (err) {
+    return;
+  }
+
+  if (!bounds || bounds.width === 0 || bounds.height === 0) return;
+
+  const diagramRect = diagram.getBoundingClientRect();
+  const availableWidth = diagramRect.width - margin * 2;
+  const availableHeight = diagramRect.height - margin * 2;
+
+  if (availableWidth <= 0 || availableHeight <= 0) return;
+
+  const scale = Math.min(
+    3,
+    Math.max(0.4, Math.min(availableWidth / bounds.width, availableHeight / bounds.height))
+  );
+
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  viewState = {
+    scale,
+    panX: diagramRect.width / 2 - centerX * scale,
+    panY: diagramRect.height / 2 - centerY * scale,
+  };
+
+  applyViewTransform();
+}
+
 function withPrevent(fn) {
   return (e) => {
     e.preventDefault();
@@ -3017,6 +3058,18 @@ function undoLastDelete() {
     renderPalette();
     renderDiagram();
     markDirty();
+    return;
+  }
+  if (action.type === 'statePlacement') {
+    const st = state.states.find((s) => s.id === action.stateId);
+    if (st) {
+      st.placed = false;
+      selectedStateId = null;
+      selectedArrowId = null;
+      renderPalette();
+      renderDiagram();
+      markDirty();
+    }
   }
 }
 
@@ -3140,6 +3193,7 @@ function attachEvents() {
     applyViewTransform();
     initStates();
     updateControls();
+    setDefinitionTableExpanded(true);
     renderTable();
     renderPalette();
     renderTransitionTable();
@@ -3763,18 +3817,24 @@ function attachEvents() {
     const st = state.states.find((s) => s.id === id);
     if (!st) return;
     const pt = getSVGPoint(e.clientX, e.clientY);
+    const wasPlaced = st.placed;
     st.x = pt.x;
     st.y = pt.y;
     st.placed = true;
     renderPalette();
     renderDiagram();
+    if (!wasPlaced) {
+      undoStack.push({ type: 'statePlacement', stateId: st.id });
+    }
     markDirty();
   });
 
   diagram.addEventListener('wheel', (e) => {
     e.preventDefault();
     const point = getSVGPoint(e.clientX, e.clientY);
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    const zoomIntensity = 0.0015;
+    const factor = Math.exp(-delta * zoomIntensity);
     const newScale = Math.min(3, Math.max(0.4, viewState.scale * factor));
     const scaleFactor = newScale / viewState.scale;
     viewState.panX = point.x - (point.x - viewState.panX) * scaleFactor;
@@ -4106,4 +4166,5 @@ document.addEventListener('DOMContentLoaded', () => {
   renderKmaps();
   applyViewTransform();
   renderDiagram();
+  openDialog('welcomeDialog');
 });
