@@ -3058,6 +3058,18 @@ function undoLastDelete() {
     renderPalette();
     renderDiagram();
     markDirty();
+    return;
+  }
+  if (action.type === 'statePlacement') {
+    const st = state.states.find((s) => s.id === action.stateId);
+    if (st) {
+      st.placed = false;
+      selectedStateId = null;
+      selectedArrowId = null;
+      renderPalette();
+      renderDiagram();
+      markDirty();
+    }
   }
 }
 
@@ -3805,11 +3817,15 @@ function attachEvents() {
     const st = state.states.find((s) => s.id === id);
     if (!st) return;
     const pt = getSVGPoint(e.clientX, e.clientY);
+    const wasPlaced = st.placed;
     st.x = pt.x;
     st.y = pt.y;
     st.placed = true;
     renderPalette();
     renderDiagram();
+    if (!wasPlaced) {
+      undoStack.push({ type: 'statePlacement', stateId: st.id });
+    }
     markDirty();
   });
 
