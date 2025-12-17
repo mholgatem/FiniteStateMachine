@@ -148,6 +148,12 @@ function clearVerificationStatus() {
   }
 }
 
+function setDefinitionTableExpanded(expanded) {
+  if (!tablePanel || !toggleTableBtn) return;
+  tablePanel.classList.toggle('collapsed', !expanded);
+  toggleTableBtn.textContent = expanded ? '▴' : '▾';
+}
+
 function setVerificationStatus(passed, message) {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
@@ -1332,9 +1338,8 @@ function loadState(data) {
   selectedStateId = null;
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
-  tablePanel.classList.add('collapsed');
   updateControls();
-  toggleTableBtn.textContent = '▾';
+  setDefinitionTableExpanded(false);
   renderTable();
   renderPalette();
   renderTransitionTable();
@@ -3140,6 +3145,7 @@ function attachEvents() {
     applyViewTransform();
     initStates();
     updateControls();
+    setDefinitionTableExpanded(true);
     renderTable();
     renderPalette();
     renderTransitionTable();
@@ -4106,4 +4112,5 @@ document.addEventListener('DOMContentLoaded', () => {
   renderKmaps();
   applyViewTransform();
   renderDiagram();
+  openDialog('welcomeDialog');
 });
