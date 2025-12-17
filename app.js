@@ -1344,6 +1344,7 @@ function loadState(data) {
   renderPalette();
   renderTransitionTable();
   renderDiagram();
+  focusDiagramOnContent({ margin: 200 });
   renderKmaps();
   verifyTransitionTableAgainstDiagram({ silent: true, recordStatus: false });
   clearDirty();
@@ -2925,6 +2926,41 @@ function applyViewTransform() {
     'transform',
     `translate(${viewState.panX} ${viewState.panY}) scale(${viewState.scale})`
   );
+}
+
+function focusDiagramOnContent(options = {}) {
+  const { margin = 160 } = options;
+  if (!diagram || !viewport || !viewport.hasChildNodes()) return;
+
+  let bounds;
+  try {
+    bounds = viewport.getBBox();
+  } catch (err) {
+    return;
+  }
+
+  if (!bounds || bounds.width === 0 || bounds.height === 0) return;
+
+  const diagramRect = diagram.getBoundingClientRect();
+  const availableWidth = diagramRect.width - margin * 2;
+  const availableHeight = diagramRect.height - margin * 2;
+
+  if (availableWidth <= 0 || availableHeight <= 0) return;
+
+  const scale = Math.min(
+    3,
+    Math.max(0.4, Math.min(availableWidth / bounds.width, availableHeight / bounds.height))
+  );
+
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  viewState = {
+    scale,
+    panX: diagramRect.width / 2 - centerX * scale,
+    panY: diagramRect.height / 2 - centerY * scale,
+  };
+
+  applyViewTransform();
 }
 
 function withPrevent(fn) {
