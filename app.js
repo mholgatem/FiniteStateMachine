@@ -1344,7 +1344,7 @@ function loadState(data) {
   renderPalette();
   renderTransitionTable();
   renderDiagram();
-  focusDiagramOnContent({ margin: 200 });
+  focusDiagramOnContent({ margin: 100 });
   renderKmaps();
   verifyTransitionTableAgainstDiagram({ silent: true, recordStatus: false });
   clearDirty();
