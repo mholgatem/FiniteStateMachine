@@ -1102,7 +1102,9 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
   const currentStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('q_'));
   const inputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('in_'));
   const nextStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('next_q_'));
-  const outputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('out_'));
+  const outputCols = transitionTableValueColumns
+    .filter((col) => columnBaseKey(col).startsWith('out_'))
+    .sort((a, b) => columnBaseKey(a).localeCompare(columnBaseKey(b), undefined, { numeric: true }));
 
   const bitCount = stateBitCount();
 
