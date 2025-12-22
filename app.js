@@ -154,12 +154,14 @@ function setDefinitionTableExpanded(expanded) {
   toggleTableBtn.textContent = expanded ? '▴' : '▾';
 }
 
-function setVerificationStatus(passed, message) {
+function setVerificationStatus(passed, message, matchPercent) {
   const verifyBtn = document.getElementById('verifyTransitionTable');
   if (!verifyBtn) return;
   const baseLabel = verifyBtn.dataset.baseLabel || verifyBtn.textContent || 'Verify Transition Table';
   verifyBtn.dataset.baseLabel = baseLabel;
-  verifyBtn.textContent = baseLabel;
+  const label =
+    matchPercent !== undefined ? `Match to diagram: ${matchPercent}%` : baseLabel;
+  verifyBtn.textContent = label;
   verifyBtn.classList.remove('verified', 'failed');
   verifyBtn.removeAttribute('title');
   if (verifyButtonResetTimer) {
@@ -169,21 +171,21 @@ function setVerificationStatus(passed, message) {
 
   if (passed === true) {
     verifyBtn.classList.add('verified');
-    verifyBtn.textContent = 'Transition table verified';
     verifyBtn.title = 'Your transition table matches your transition diagram';
     state.transitionTableVerified = true;
     return;
   }
   if (passed === false) {
     verifyBtn.classList.add('failed');
-    verifyBtn.textContent = "Table & diagram don't match";
     verifyBtn.title = message || 'Your transition table DOES NOT match your transition diagram';
     state.transitionTableVerified = false;
-    verifyButtonResetTimer = setTimeout(() => {
-      verifyBtn.classList.remove('failed');
-      verifyBtn.textContent = baseLabel;
-      verifyBtn.removeAttribute('title');
-    }, 2000);
+    if (matchPercent === undefined) {
+      verifyButtonResetTimer = setTimeout(() => {
+        verifyBtn.classList.remove('failed');
+        verifyBtn.textContent = baseLabel;
+        verifyBtn.removeAttribute('title');
+      }, 2000);
+    }
     return;
   }
   state.transitionTableVerified = false;
@@ -972,16 +974,137 @@ function transitionTableRowIsBlank(row) {
   });
 }
 
+function bitToInt(val) {
+  if (val === '0') return 0;
+  if (val === '1') return 1;
+  if (val === 'X') return 2;
+  return -1;
+}
+
+function expandInputCombosForDictionary(bits) {
+  let combos = [''];
+  (bits || []).forEach((bit) => {
+    const normalized = normalizeBinaryValue(bit);
+    const options = normalized === 'X' ? ['0', '1'] : [normalized || '-'];
+    const next = [];
+    combos.forEach((prefix) => {
+      options.forEach((opt) => next.push(`${prefix}${opt}`));
+    });
+    combos = next;
+  });
+  return combos;
+}
+
+function buildTransitionDiagramDictionary() {
+  const bitCount = stateBitCount();
+  const dict = new Map();
+  const defaultValue = new Array(bitCount + state.outputs.length).fill(2);
+
+  state.transitions.forEach((tr) => {
+    normalizeTransition(tr);
+    const sourceBits = stateBinaryCode(tr.from, bitCount);
+    const nextBitsStr = stateBinaryCode(tr.to, bitCount) || '';
+    const nextStateBits = normalizeBitArray(nextBitsStr.split(''), bitCount);
+    const outputs = expectedOutputsForTransition(tr);
+    const combos = combinationsFromValues(tr.inputValues);
+
+    const value = [...nextStateBits, ...outputs].map((bit) => bitToInt(bit));
+    combos.forEach((combo) => {
+      const key = `${sourceBits}|${combo || 'none'}`;
+      dict.set(key, value);
+    });
+  });
+
+  state.states
+    .filter((st) => !stateIsUsed(st.id))
+    .forEach((st) => {
+      const bits = stateBinaryCode(st.id, bitCount);
+      generateInputCombos(state.inputs.length).forEach((combo) => {
+        const key = `${bits}|${combo || 'none'}`;
+        dict.set(key, defaultValue.slice());
+      });
+    });
+
+  return dict;
+}
+
+function buildTransitionTableDictionary(currentStateCols, inputCols, nextStateCols, outputCols) {
+  const dict = new Map();
+  const rows = state.transitionTable.rows || [];
+
+  rows.forEach((row) => {
+    const actualRaw = readTransitionTableRowValues(row, currentStateCols, inputCols, nextStateCols, outputCols);
+
+    const stateBits = actualRaw.currentStateBits
+      .map((bit) => normalizeBinaryValue(bit) || '-')
+      .join('');
+
+    const inputCombos = expandInputCombosForDictionary(actualRaw.inputBits);
+    const value = [...actualRaw.nextStateBits, ...actualRaw.outputs].map((bit) => bitToInt(normalizeBinaryValue(bit)));
+
+    inputCombos.forEach((combo) => {
+      const key = `${stateBits}|${combo || 'none'}`;
+      dict.set(key, value);
+    });
+  });
+
+  return dict;
+}
+
+function computeDictionaryMatch(diagramDict, tableDict) {
+  const allKeys = new Set([...diagramDict.keys(), ...tableDict.keys()]);
+  let matches = 0;
+  allKeys.forEach((key) => {
+    const expected = diagramDict.get(key);
+    const actual = tableDict.get(key);
+    if (!expected || !actual) return;
+    if (expected.length !== actual.length) return;
+    const identical = expected.every((val, idx) => val === actual[idx]);
+    if (identical) matches += 1;
+  });
+
+  const total = allKeys.size || 1;
+  return Math.round((matches / total) * 100);
+}
+
+function missingColumnGroups() {
+  const bitCount = stateBitCount();
+  const columns = (state.transitionTable?.columns || []).filter((col) => col.type !== 'spacer');
+  const counts = {
+    current: columns.filter((col) => columnBaseKey(col).startsWith('q_')).length,
+    inputs: columns.filter((col) => columnBaseKey(col).startsWith('in_')).length,
+    next: columns.filter((col) => columnBaseKey(col).startsWith('next_q_')).length,
+    outputs: columns.filter((col) => columnBaseKey(col).startsWith('out_')).length,
+  };
+
+  const missing = [];
+  if (counts.current < bitCount) missing.push('current state');
+  if (counts.inputs < state.inputs.length) missing.push('inputs');
+  if (counts.next < bitCount) missing.push('next state');
+  if (counts.outputs < state.outputs.length) missing.push('outputs');
+  return missing;
+}
+
 function verifyTransitionTableAgainstDiagram(options = {}) {
   const { silent = false, recordStatus = true } = options;
   ensureTransitionTableStructure();
+  const missingGroups = missingColumnGroups();
+  if (missingGroups.length) {
+    const reason = `Place required columns in the table: ${missingGroups.join(', ')}`;
+    setVerificationStatus(false, reason, 0);
+    if (recordStatus) unsavedChanges = true;
+    return;
+  }
+
   const { expectations, conflict } = buildDiagramExpectations();
   const uncheckedExpectations = new Set(expectations.keys());
 
   const currentStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('q_'));
   const inputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('in_'));
   const nextStateCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('next_q_'));
-  const outputCols = transitionTableValueColumns.filter((col) => columnBaseKey(col).startsWith('out_'));
+  const outputCols = transitionTableValueColumns
+    .filter((col) => columnBaseKey(col).startsWith('out_'))
+    .sort((a, b) => columnBaseKey(a).localeCompare(columnBaseKey(b), undefined, { numeric: true }));
 
   const bitCount = stateBitCount();
 
@@ -998,67 +1121,32 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
     return;
   }
 
-  let matches = !conflict;
-
-  state.transitionTable.rows.forEach((row) => {
-    if (!matches) return;
-    const rowIsBlank = transitionTableRowIsBlank(row);
-    if (rowIsBlank) return;
-    const actualRaw = readTransitionTableRowValues(
-      row,
-      currentStateCols,
-      inputCols,
-      nextStateCols,
-      outputCols,
-    );
-    const blankToZero = (arr) => arr.map((val) => (val ? val : '0'));
-    const actual = {
-      currentStateBits: blankToZero(actualRaw.currentStateBits),
-      inputBits: blankToZero(actualRaw.inputBits),
-      nextStateBits: blankToZero(actualRaw.nextStateBits),
-      outputs: blankToZero(actualRaw.outputs),
-    };
-    if (actual.currentStateBits.some((v) => !v) || actual.inputBits.some((v) => !v)) {
-      matches = false;
-      return;
-    }
-    const currentStateBits = actual.currentStateBits.join('');
-    const inputBits = actual.inputBits.join('');
-    if (!currentStateBits || currentStateBits.length !== bitCount) {
-      matches = false;
-      return;
-    }
-    const matchingState = findStateByBits(currentStateBits);
-    if (matchingState && !stateIsUsed(matchingState.id)) return;
-    const key = `${currentStateBits}|${inputBits || 'none'}`;
-    const expected = expectations.get(key);
-    if (!expected) {
-      matches = false;
-      return;
-    }
-    if (!arraysCompatible(expected.nextStateBits, actual.nextStateBits)) {
-      matches = false;
-      return;
-    }
-    if (!outputsCompatible(expected.outputs, actual.outputs)) {
-      matches = false;
-      return;
-    }
-    uncheckedExpectations.delete(key);
-  });
-
-  if (matches && uncheckedExpectations.size > 0) {
-    matches = false;
+  if (conflict) {
+    setVerificationStatus(false, 'Diagram transitions are incomplete or conflicting', 0);
+    if (recordStatus) unsavedChanges = true;
+    return;
   }
 
-  if (matches) {
-    setVerificationStatus(true);
+  const diagramDict = buildTransitionDiagramDictionary();
+  const tableDict = buildTransitionTableDictionary(
+    currentStateCols,
+    inputCols,
+    nextStateCols,
+    outputCols,
+  );
+
+  tableDict.forEach((_, key) => uncheckedExpectations.delete(key));
+
+  const matchPercent = computeDictionaryMatch(diagramDict, tableDict);
+
+  if (matchPercent === 100 && uncheckedExpectations.size === 0) {
+    setVerificationStatus(true, undefined, matchPercent);
     if (recordStatus) unsavedChanges = true;
   } else {
     const reason = uncheckedExpectations.size
       ? 'Transition table is missing transitions that exist in the diagram'
       : undefined;
-    setVerificationStatus(false, reason);
+    setVerificationStatus(false, reason, matchPercent);
     if (recordStatus) unsavedChanges = true;
   }
 }
@@ -1305,9 +1393,101 @@ function sanitizeFilename(name, fallback = 'kmap') {
   return cleaned || fallback;
 }
 
+const transitionTableInverseValueMap = {
+  '-1': '',
+  0: '0',
+  1: '1',
+  2: 'X',
+};
+
+function compressTransitionTable(table) {
+  if (!table) return { headers: [], data: [] };
+
+  const headers = (table.valueColumns || []).map((col) => col.key);
+  const rows = table.rows || [];
+  const cells = table.cells || {};
+
+  const mapValue = (value) => {
+    if (value === '0') return 0;
+    if (value === '1') return 1;
+    if (value === 'X') return 2;
+    return -1;
+  };
+
+  const data = rows.map((row) =>
+    headers.map((colKey) => mapValue(cells[`${row.key}::${colKey}`] ?? '')),
+  );
+
+  const compressed = { ...table, headers, data };
+  delete compressed.cells;
+  return compressed;
+}
+
+function decompressTransitionTable(compressedTable, context = {}) {
+  if (!compressedTable) return { cells: {} };
+
+  const headers = compressedTable.headers || [];
+  const data = compressedTable.data || [];
+  const { numStates = state.numStates, inputs = state.inputs } = context;
+
+  const combos = generateInputCombos(inputs.length);
+  const rows = [];
+  for (let s = 0; s < numStates; s += 1) {
+    combos.forEach((combo) => {
+      rows.push({ key: `${s}|${combo || 'none'}` });
+    });
+  }
+
+  const mapValue = (value) => transitionTableInverseValueMap[value] ?? '';
+
+  const cells = {};
+  rows.forEach((row, rowIdx) => {
+    const rowValues = data[rowIdx] || [];
+    headers.forEach((colKey, colIdx) => {
+      const mapped = mapValue(rowValues[colIdx]);
+      cells[`${row.key}::${colKey}`] = mapped;
+    });
+  });
+
+  const table = { ...compressedTable, cells };
+  delete table.data;
+  delete table.headers;
+  return table;
+}
+
+function stringifyStateWithInlineArrays(payloadState) {
+  const inlineMap = new Map();
+  let placeholderId = 0;
+
+  const addInline = (arr, formatter) => {
+    const placeholder = `__INLINE_ARRAY_${placeholderId += 1}__`;
+    inlineMap.set(`"${placeholder}"`, formatter(arr));
+    return placeholder;
+  };
+
+  const replacer = (key, value) => {
+    if (key === 'headers' && Array.isArray(value)) {
+      return addInline(value, (arr) => `[ ${arr.map((v) => JSON.stringify(v)).join(', ')} ]`);
+    }
+    if (key === 'data' && Array.isArray(value)) {
+      return value.map((row) =>
+        (Array.isArray(row) ? addInline(row, (arr) => `[ ${arr.join(', ')} ]`) : row));
+    }
+    return value;
+  };
+
+  let json = JSON.stringify(payloadState, replacer, 2);
+  inlineMap.forEach((formatted, token) => {
+    json = json.replaceAll(token, formatted);
+  });
+  return json;
+}
+
 function saveState() {
   ensureTransitionTableStructure();
-  const payload = JSON.stringify(state, null, 2);
+  const payloadState = JSON.parse(JSON.stringify(state));
+  payloadState.transitionTable = compressTransitionTable(state.transitionTable);
+  const payload = stringifyStateWithInlineArrays(payloadState);
   const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   download(`${state.name || 'fsm'}-save.json`, url);
@@ -1316,11 +1496,31 @@ function saveState() {
 }
 
 function loadState(data) {
+  const targetNumStates = coerceAllowedStateCount(data.numStates);
+  const targetInputs = normalizeNames(data.inputs || []);
+  const targetOutputs = normalizeNames(data.outputs || []);
+
+  const transitionTableData = data.transitionTable;
+  const decompressedTransitionTable = transitionTableData?.data
+    ? decompressTransitionTable(transitionTableData, {
+        numStates: targetNumStates,
+        inputs: targetInputs,
+      })
+    : transitionTableData?.cells
+      ? transitionTableData
+      : { cells: {} };
+
   const savedShowBinary = data.showBinary;
-  Object.assign(state, data);
-  state.numStates = coerceAllowedStateCount(state.numStates);
-  state.inputs = normalizeNames(state.inputs || []);
-  state.outputs = normalizeNames(state.outputs || []);
+  Object.assign(state, {
+    ...data,
+    numStates: targetNumStates,
+    inputs: targetInputs,
+    outputs: targetOutputs,
+    transitionTable: decompressedTransitionTable,
+  });
+  state.numStates = targetNumStates;
+  state.inputs = targetInputs;
+  state.outputs = targetOutputs;
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
   state.transitionTableVerified = !!data.transitionTableVerified;
