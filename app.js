@@ -1003,6 +1003,21 @@ function orderedValueArray(valueOrder, valueLookup) {
   });
 }
 
+function columnIndexFromKey(base) {
+  const match = `${base || ''}`.match(/_(\d+)$/);
+  return match ? parseInt(match[1], 10) : -1;
+}
+
+function dictionaryValueOrder(nextStateCols, outputCols) {
+  const orderedNext = [...nextStateCols].sort(
+    (a, b) => columnIndexFromKey(columnBaseKey(b)) - columnIndexFromKey(columnBaseKey(a)),
+  );
+  const orderedOutputs = [...outputCols].sort(
+    (a, b) => columnIndexFromKey(columnBaseKey(a)) - columnIndexFromKey(columnBaseKey(b)),
+  );
+  return [...orderedNext, ...orderedOutputs];
+}
+
 function buildTransitionDiagramDictionary(valueOrder) {
   const bitCount = stateBitCount();
   const dict = new Map();
@@ -1144,10 +1159,7 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
     return;
   }
 
-  const valueOrder = transitionTableValueColumns.filter((col) => {
-    const base = columnBaseKey(col);
-    return base.startsWith('next_q_') || base.startsWith('out_');
-  });
+  const valueOrder = dictionaryValueOrder(nextStateCols, outputCols);
 
   const diagramDict = buildTransitionDiagramDictionary(valueOrder);
   const tableDict = buildTransitionTableDictionary(
