@@ -1367,11 +1367,39 @@ function decompressTransitionTable(compressedTable, context = {}) {
   return table;
 }
 
+function stringifyStateWithInlineArrays(payloadState) {
+  const inlineMap = new Map();
+  let placeholderId = 0;
+
+  const addInline = (arr, formatter) => {
+    const placeholder = `__INLINE_ARRAY_${placeholderId += 1}__`;
+    inlineMap.set(`"${placeholder}"`, formatter(arr));
+    return placeholder;
+  };
+
+  const replacer = (key, value) => {
+    if (key === 'headers' && Array.isArray(value)) {
+      return addInline(value, (arr) => `[ ${arr.map((v) => JSON.stringify(v)).join(', ')} ]`);
+    }
+    if (key === 'data' && Array.isArray(value)) {
+      return value.map((row) =>
+        (Array.isArray(row) ? addInline(row, (arr) => `[ ${arr.join(', ')} ]`) : row));
+    }
+    return value;
+  };
+
+  let json = JSON.stringify(payloadState, replacer, 2);
+  inlineMap.forEach((formatted, token) => {
+    json = json.replaceAll(token, formatted);
+  });
+  return json;
+}
+
 function saveState() {
   ensureTransitionTableStructure();
   const payloadState = JSON.parse(JSON.stringify(state));
   payloadState.transitionTable = compressTransitionTable(state.transitionTable);
-  const payload = JSON.stringify(payloadState, null, 2);
+  const payload = stringifyStateWithInlineArrays(payloadState);
   const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   download(`${state.name || 'fsm'}-save.json`, url);
