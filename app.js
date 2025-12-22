@@ -1305,9 +1305,73 @@ function sanitizeFilename(name, fallback = 'kmap') {
   return cleaned || fallback;
 }
 
+const transitionTableInverseValueMap = {
+  '-1': '',
+  0: '0',
+  1: '1',
+  2: 'X',
+};
+
+function compressTransitionTable(table) {
+  if (!table) return { headers: [], data: [] };
+
+  const headers = (table.valueColumns || []).map((col) => col.key);
+  const rows = table.rows || [];
+  const cells = table.cells || {};
+
+  const mapValue = (value) => {
+    if (value === '0') return 0;
+    if (value === '1') return 1;
+    if (value === 'X') return 2;
+    return -1;
+  };
+
+  const data = rows.map((row) =>
+    headers.map((colKey) => mapValue(cells[`${row.key}::${colKey}`] ?? '')),
+  );
+
+  const compressed = { ...table, headers, data };
+  delete compressed.cells;
+  return compressed;
+}
+
+function decompressTransitionTable(compressedTable, context = {}) {
+  if (!compressedTable) return { cells: {} };
+
+  const headers = compressedTable.headers || [];
+  const data = compressedTable.data || [];
+  const { numStates = state.numStates, inputs = state.inputs } = context;
+
+  const combos = generateInputCombos(inputs.length);
+  const rows = [];
+  for (let s = 0; s < numStates; s += 1) {
+    combos.forEach((combo) => {
+      rows.push({ key: `${s}|${combo || 'none'}` });
+    });
+  }
+
+  const mapValue = (value) => transitionTableInverseValueMap[value] ?? '';
+
+  const cells = {};
+  rows.forEach((row, rowIdx) => {
+    const rowValues = data[rowIdx] || [];
+    headers.forEach((colKey, colIdx) => {
+      const mapped = mapValue(rowValues[colIdx]);
+      cells[`${row.key}::${colKey}`] = mapped;
+    });
+  });
+
+  const table = { ...compressedTable, cells };
+  delete table.data;
+  delete table.headers;
+  return table;
+}
+
 function saveState() {
   ensureTransitionTableStructure();
-  const payload = JSON.stringify(state, null, 2);
+  const payloadState = JSON.parse(JSON.stringify(state));
+  payloadState.transitionTable = compressTransitionTable(state.transitionTable);
+  const payload = JSON.stringify(payloadState, null, 2);
   const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   download(`${state.name || 'fsm'}-save.json`, url);
@@ -1316,11 +1380,31 @@ function saveState() {
 }
 
 function loadState(data) {
+  const targetNumStates = coerceAllowedStateCount(data.numStates);
+  const targetInputs = normalizeNames(data.inputs || []);
+  const targetOutputs = normalizeNames(data.outputs || []);
+
+  const transitionTableData = data.transitionTable;
+  const decompressedTransitionTable = transitionTableData?.data
+    ? decompressTransitionTable(transitionTableData, {
+        numStates: targetNumStates,
+        inputs: targetInputs,
+      })
+    : transitionTableData?.cells
+      ? transitionTableData
+      : { cells: {} };
+
   const savedShowBinary = data.showBinary;
-  Object.assign(state, data);
-  state.numStates = coerceAllowedStateCount(state.numStates);
-  state.inputs = normalizeNames(state.inputs || []);
-  state.outputs = normalizeNames(state.outputs || []);
+  Object.assign(state, {
+    ...data,
+    numStates: targetNumStates,
+    inputs: targetInputs,
+    outputs: targetOutputs,
+    transitionTable: decompressedTransitionTable,
+  });
+  state.numStates = targetNumStates;
+  state.inputs = targetInputs;
+  state.outputs = targetOutputs;
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
   state.transitionTableVerified = !!data.transitionTableVerified;
