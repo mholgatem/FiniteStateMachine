@@ -995,10 +995,18 @@ function expandInputCombosForDictionary(bits) {
   return combos;
 }
 
-function buildTransitionDiagramDictionary() {
+function orderedValueArray(valueOrder, valueLookup) {
+  return valueOrder.map((col) => {
+    const base = columnBaseKey(col);
+    const raw = valueLookup.get(base);
+    return bitToInt(normalizeBinaryValue(raw));
+  });
+}
+
+function buildTransitionDiagramDictionary(valueOrder) {
   const bitCount = stateBitCount();
   const dict = new Map();
-  const defaultValue = new Array(bitCount + state.outputs.length).fill(2);
+  const defaultValue = new Array(valueOrder.length).fill(2);
 
   state.transitions.forEach((tr) => {
     normalizeTransition(tr);
@@ -1008,7 +1016,11 @@ function buildTransitionDiagramDictionary() {
     const outputs = expectedOutputsForTransition(tr);
     const combos = combinationsFromValues(tr.inputValues);
 
-    const value = [...nextStateBits, ...outputs].map((bit) => bitToInt(bit));
+    const valueLookup = new Map();
+    nextStateBits.forEach((bit, idx) => valueLookup.set(`next_q_${idx}`, bit));
+    outputs.forEach((bit, idx) => valueLookup.set(`out_${idx}`, bit));
+
+    const value = orderedValueArray(valueOrder, valueLookup);
     combos.forEach((combo) => {
       const key = `${sourceBits}|${combo || 'none'}`;
       dict.set(key, value);
@@ -1028,7 +1040,7 @@ function buildTransitionDiagramDictionary() {
   return dict;
 }
 
-function buildTransitionTableDictionary(currentStateCols, inputCols, nextStateCols, outputCols) {
+function buildTransitionTableDictionary(currentStateCols, inputCols, nextStateCols, outputCols, valueOrder) {
   const dict = new Map();
   const rows = state.transitionTable.rows || [];
 
@@ -1040,7 +1052,14 @@ function buildTransitionTableDictionary(currentStateCols, inputCols, nextStateCo
       .join('');
 
     const inputCombos = expandInputCombosForDictionary(actualRaw.inputBits);
-    const value = [...actualRaw.nextStateBits, ...actualRaw.outputs].map((bit) => bitToInt(normalizeBinaryValue(bit)));
+
+    const nextStateMap = new Map(
+      nextStateCols.map((col, idx) => [columnBaseKey(col), actualRaw.nextStateBits[idx]]),
+    );
+    const outputMap = new Map(outputCols.map((col, idx) => [columnBaseKey(col), actualRaw.outputs[idx]]));
+    const valueLookup = new Map([...nextStateMap, ...outputMap]);
+
+    const value = orderedValueArray(valueOrder, valueLookup);
 
     inputCombos.forEach((combo) => {
       const key = `${stateBits}|${combo || 'none'}`;
@@ -1125,12 +1144,18 @@ function verifyTransitionTableAgainstDiagram(options = {}) {
     return;
   }
 
-  const diagramDict = buildTransitionDiagramDictionary();
+  const valueOrder = transitionTableValueColumns.filter((col) => {
+    const base = columnBaseKey(col);
+    return base.startsWith('next_q_') || base.startsWith('out_');
+  });
+
+  const diagramDict = buildTransitionDiagramDictionary(valueOrder);
   const tableDict = buildTransitionTableDictionary(
     currentStateCols,
     inputCols,
     nextStateCols,
     outputCols,
+    valueOrder,
   );
 
   tableDict.forEach((_, key) => uncheckedExpectations.delete(key));
