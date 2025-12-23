@@ -20,24 +20,24 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Tupl
 # Grading metrics (adjust to tune rubric)
 # ---------------------------------------------------------------------------
 # State definition table checks
-STATE_DESCRIPTION_WEIGHT = 4.0
-STATE_LABEL_WEIGHT = 4.0
-STATE_BINARY_WEIGHT = 6.0
-INPUT_MINIMUM_WEIGHT = 4.0
-OUTPUT_MINIMUM_WEIGHT = 4.0
+STATE_DESCRIPTION_WEIGHT = 2.0
+STATE_LABEL_WEIGHT = 2.0
+STATE_BINARY_WEIGHT = 2.0
+INPUT_MINIMUM_WEIGHT = 2.0
+OUTPUT_MINIMUM_WEIGHT = 2.0
 
 # Diagram checks
 PLACED_STATES_WEIGHT = 10.0
-OUTPUT_VALUE_WEIGHT = 8.0
-ARROW_COVERAGE_WEIGHT = 14.0
+OUTPUT_VALUE_WEIGHT = 5.0
+ARROW_COVERAGE_WEIGHT = 15.0
 
 # Transition table checks
-TABLE_STRUCTURE_WEIGHT = 12.0
-TABLE_MATCH_WEIGHT = 16.0
+TABLE_STRUCTURE_WEIGHT = 10.0
+TABLE_MATCH_WEIGHT = 20.0
 
 # Karnaugh map checks (placeholders, wired into totals for future use)
-KMAP_COMPLETENESS_WEIGHT = 2.0
-KMAP_EXPRESSION_WEIGHT = 2.0
+KMAP_COMPLETENESS_WEIGHT = 15.0
+KMAP_EXPRESSION_WEIGHT = 15.0
 
 
 @dataclass
