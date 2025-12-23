@@ -500,6 +500,13 @@ button {
   transition: background 0.2s ease, transform 0.1s ease;
 }
 
+button:disabled {
+  background: var(--border);
+  color: var(--text-muted, #6b7280);
+  cursor: not-allowed;
+  border-color: var(--border);
+}
+
 button:hover {
   background: var(--accent);
 }
@@ -933,6 +940,15 @@ svg text {
 
 .kmap-expression-tray:focus {
   outline: 2px solid var(--accent);
+}
+
+.kmap-dialog-dropzone {
+  min-height: 52px;
+}
+
+.kmap-dialog-drop-hover {
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
 }
 
 .kmap-expr-placeholder {

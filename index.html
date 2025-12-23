@@ -285,13 +285,22 @@
     <div id="kmapCreateDialog" class="dialog-backdrop hidden">
       <div class="dialog">
         <h2>Create Karnaugh Map</h2>
-        <div class="form-row">
-          <label for="kmapLabel">K-map label</label>
-          <input id="kmapLabel" type="text" placeholder="F" />
+        <div class="kmap-variable-tray transition-column-tray">
+          <span class="kmap-tray-label">Column tray:</span>
+          <div id="kmapColumnTray" class="kmap-variable-items"></div>
         </div>
         <div class="form-row">
-          <label for="kmapVariables">Map Variables (2 min, 6 max, comma separated)</label>
-          <input id="kmapVariables" type="text" placeholder="A, B, C" />
+          <label for="kmapLabelDropzone">Function Identifier</label>
+          <div id="kmapLabelDropzone" class="kmap-expression-tray kmap-dialog-dropzone" tabindex="0"></div>
+        </div>
+        <div class="form-row">
+          <label for="kmapVariablesDropzone">Independent Variables (MSB → LSB)</label>
+          <div
+            id="kmapVariablesDropzone"
+            class="kmap-expression-tray kmap-dialog-dropzone"
+            tabindex="0"
+            aria-label="K-map variable order"
+          ></div>
         </div>
         <div class="form-row">
           <label for="kmapType">Map type</label>
