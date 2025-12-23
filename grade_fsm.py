@@ -560,8 +560,10 @@ def check_kmap_expressions(machine: Mapping[str, object]) -> None:
     return None
 
 
-def grade_file(path: Path, min_states: int, min_inputs: int, min_outputs: int) -> GradeResult:
-    """Grade a single save file and return the result."""
+def grade_file(
+    path: Path, min_states: int, min_inputs: int, min_outputs: int, verbose: bool = False
+) -> GradeResult:
+    """Grade a single save file and optionally emit verbose deductions."""
 
     machine = load_save(path)
     sections = {
@@ -569,7 +571,20 @@ def grade_file(path: Path, min_states: int, min_inputs: int, min_outputs: int) -
         "Transition diagram": check_transition_diagram(machine, min_states, min_inputs, min_outputs),
         "Transition table vs diagram": check_transition_table(machine, min_states, min_inputs, min_outputs),
     }
-    return GradeResult(file_path=path, sections=sections)
+    result = GradeResult(file_path=path, sections=sections)
+
+    if verbose:
+        for label, section in result.sections.items():
+            if section.score >= section.weight:
+                continue
+            header = f"[{result.file_path.name}] {label}: {section.score:.2f}/{section.weight:.2f}"
+            if section.notes:
+                for note in section.notes:
+                    print(f"{header} — {note}")
+            else:
+                print(f"{header} — Points deducted (no details recorded)")
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -584,6 +599,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-states", type=int, default=2, help="Minimum number of states required.")
     parser.add_argument("--min-inputs", type=int, default=0, help="Minimum number of inputs required.")
     parser.add_argument("--min-outputs", type=int, default=0, help="Minimum number of outputs required.")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print detailed deductions when points are lost.",
+    )
     return parser.parse_args()
 
 
@@ -606,7 +626,15 @@ def main() -> None:
     results: List[GradeResult] = []
     for save_file in save_files:
         try:
-            results.append(grade_file(save_file, args.min_states, args.min_inputs, args.min_outputs))
+            results.append(
+                grade_file(
+                    save_file,
+                    args.min_states,
+                    args.min_inputs,
+                    args.min_outputs,
+                    verbose=args.verbose,
+                )
+            )
         except Exception as exc:  # noqa: BLE001 - keep grading other files
             placeholder = GradeResult(
                 file_path=save_file,
