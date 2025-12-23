@@ -1052,13 +1052,29 @@ def check_transition_table(machine: Mapping[str, object], min_states: int, min_i
     if match_percent < 100:
         notes.append(f"Table/diagram mismatch: {match_percent}% match")
 
-    kmap_completeness_score, kmap_expression_score, kmap_notes = grade_kmaps(
-        machine, table_dict, next_cols, output_cols
-    )
-    notes.extend(kmap_notes)
+    total_weight = TABLE_STRUCTURE_WEIGHT + TABLE_MATCH_WEIGHT
+    total_score = structure_score + match_score
 
-    total_weight = TABLE_STRUCTURE_WEIGHT + TABLE_MATCH_WEIGHT + KMAP_COMPLETENESS_WEIGHT + KMAP_EXPRESSION_WEIGHT
-    total_score = structure_score + match_score + kmap_completeness_score + kmap_expression_score
+    return SectionResult(score=total_score, weight=total_weight, notes=notes)
+
+
+def check_kmaps(machine: Mapping[str, object], min_states: int, min_inputs: int, min_outputs: int) -> SectionResult:
+    """Grade Karnaugh maps separately from the transition table checks."""
+
+    states = machine.get("states", [])
+    inputs = machine.get("inputs", [])
+    table = machine.get("transitionTable") or {"cells": {}, "rows": [], "valueColumns": []}
+
+    num_states = max(machine.get("numStates", len(states)), len(states))
+
+    expanded_table = decompress_transition_table(table, num_states, inputs)
+    current_cols, input_cols, next_cols, output_cols = categorize_columns(expanded_table.get("valueColumns", []))
+
+    table_dict = build_transition_table_dictionary(expanded_table, current_cols, input_cols, next_cols, output_cols)
+
+    completeness_score, expression_score, notes = grade_kmaps(machine, table_dict, next_cols, output_cols)
+    total_weight = KMAP_COMPLETENESS_WEIGHT + KMAP_EXPRESSION_WEIGHT
+    total_score = completeness_score + expression_score
 
     return SectionResult(score=total_score, weight=total_weight, notes=notes)
 
@@ -1073,6 +1089,7 @@ def grade_file(
         "State definitions": check_state_definitions(machine, min_inputs, min_outputs),
         "Transition diagram": check_transition_diagram(machine, min_states, min_inputs, min_outputs),
         "Transition table vs diagram": check_transition_table(machine, min_states, min_inputs, min_outputs),
+        "K-map grading": check_kmaps(machine, min_states, min_inputs, min_outputs),
     }
     result = GradeResult(file_path=path, sections=sections)
 
