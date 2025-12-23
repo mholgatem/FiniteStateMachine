@@ -69,9 +69,11 @@ const kmapZipStatus = document.getElementById('kmapZipStatus');
 const kmapCircleToggle = document.getElementById('toggleKmapCircles');
 const kmapQuickRefBtn = document.getElementById('kmapQuickRef');
 const kmapQuickRefDialog = document.getElementById('kmapQuickRefDialog');
+const kmapCreateDialog = document.getElementById('kmapCreateDialog');
 const confirmKmapCreate = document.getElementById('confirmKmapCreate');
-const kmapLabelInput = document.getElementById('kmapLabel');
-const kmapVariablesInput = document.getElementById('kmapVariables');
+const kmapLabelDropzone = document.getElementById('kmapLabelDropzone');
+const kmapVariablesDropzone = document.getElementById('kmapVariablesDropzone');
+const kmapColumnTray = document.getElementById('kmapColumnTray');
 const kmapTypeInput = document.getElementById('kmapType');
 const kmapDirectionInput = document.getElementById('kmapDirection');
 const kmapResizeHandle = document.getElementById('kmapResizeHandle');
@@ -79,8 +81,15 @@ const transitionColumnBuilder = document.getElementById('transitionColumnBuilder
 const toggleTransitionBuilderBtn = document.getElementById('toggleTransitionBuilder');
 
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
-let kmapFormMemory = { label: '', variables: '', type: 'sop', direction: 'horizontal' };
+let kmapFormMemory = {
+  functionToken: null,
+  variableTokens: [],
+  type: 'sop',
+  direction: 'horizontal',
+};
 let kmapExpressionDragState = null;
+let kmapDialogSelections = { functionToken: null, variableTokens: [] };
+let kmapDialogDragState = null;
 let transitionColumnDragState = null;
 let showKmapCircles = false;
 let showKmapCirclesBeforeResize = false;
@@ -238,6 +247,25 @@ function parseList(value) {
 function parseKmapVariables(value) {
   const vars = parseList(value || '');
   return vars.slice(0, 6);
+}
+
+function columnTemplatesForKmapDialog() {
+  return (state.transitionTable?.availableColumns || buildTransitionColumnTemplates()).filter(
+    (tpl) => tpl.type !== 'spacer',
+  );
+}
+
+function cloneColumnToken(token) {
+  if (!token) return null;
+  return {
+    ...token,
+    baseKey: token.baseKey || columnBaseKey(token),
+  };
+}
+
+function tokenLabel(token) {
+  if (!token) return '';
+  return token.label || token.baseKey || token.key || '';
 }
 
 function defaultSelections(count, fallbackText = '') {
@@ -1524,15 +1552,29 @@ function loadState(data) {
   state.showBinary = savedShowBinary !== undefined ? savedShowBinary : true;
   if (!state.transitionTable) state.transitionTable = { cells: {} };
   state.transitionTableVerified = !!data.transitionTableVerified;
-  state.kmaps = Array.isArray(data.kmaps)
-    ? data.kmaps.map((k) => ({
-        ...k,
-        id: k.id || Date.now() + Math.random(),
-        variables: normalizeNames(k.variables || []),
-        cells: k.cells || {},
-        expression: k.expression || '',
-      }))
-    : [];
+  const normalizeKmap = (k) => {
+    const variableTokens = Array.isArray(k.variableTokens)
+      ? k.variableTokens.map((tk) => cloneColumnToken(tk)).filter(Boolean)
+      : [];
+    const functionToken = cloneColumnToken(k.functionToken);
+    const providedVars = normalizeNames(k.variables || []);
+    const derivedVars = variableTokens.length
+      ? variableTokens.map((tk) => tokenLabel(tk))
+      : providedVars;
+    const variables = derivedVars.slice(0, 6);
+    const label = k.label || tokenLabel(functionToken) || 'K-map';
+    return {
+      ...k,
+      id: k.id || Date.now() + Math.random(),
+      variables,
+      cells: k.cells || {},
+      expression: k.expression || '',
+      functionToken,
+      variableTokens,
+      label,
+    };
+  };
+  state.kmaps = Array.isArray(data.kmaps) ? data.kmaps.map(normalizeKmap) : [];
   undoStack = [];
   selectedArrowId = null;
   selectedStateId = null;
@@ -2763,19 +2805,203 @@ function closeKmapWindow() {
   if (kmapWindow) kmapWindow.classList.add('hidden');
 }
 
+function renderKmapDialogToken(token, index = null) {
+  const el = document.createElement('div');
+  el.className = 'kmap-expr-token transition-column-token kmap-dialog-token';
+  el.draggable = true;
+  el.dataset.tokenType = token.type || 'value';
+  el.dataset.tokenValue = token.key;
+  el.dataset.tokenBaseKey = token.baseKey || columnBaseKey(token);
+  el.dataset.tokenLabel = token.label || '';
+  if (index !== null) el.dataset.index = index;
+  const inner = document.createElement('span');
+  inner.className = 'kmap-expr-token-inner';
+  inner.innerHTML = formatScriptedText(tokenLabel(token));
+  el.appendChild(inner);
+  return el;
+}
+
+function renderKmapDialogTray() {
+  if (!kmapColumnTray) return;
+  kmapColumnTray.innerHTML = '';
+  columnTemplatesForKmapDialog().forEach((tpl) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'kmap-token transition-token kmap-dialog-token';
+    btn.draggable = true;
+    btn.dataset.tokenType = tpl.type || 'value';
+    btn.dataset.tokenValue = tpl.key;
+    btn.dataset.tokenBaseKey = tpl.baseKey || columnBaseKey(tpl);
+    btn.dataset.tokenLabel = tpl.label || '';
+    btn.innerHTML = formatScriptedText(tpl.label || '');
+    kmapColumnTray.appendChild(btn);
+  });
+}
+
+function renderKmapDialogDropzones() {
+  if (kmapLabelDropzone) {
+    clearDropMarker(kmapLabelDropzone);
+    kmapLabelDropzone.innerHTML = '';
+    if (kmapDialogSelections.functionToken) {
+      kmapLabelDropzone.appendChild(renderKmapDialogToken(kmapDialogSelections.functionToken));
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'kmap-expr-placeholder';
+      placeholder.textContent = 'Drag a column here to set the function identifier';
+      kmapLabelDropzone.appendChild(placeholder);
+    }
+  }
+
+  if (kmapVariablesDropzone) {
+    clearDropMarker(kmapVariablesDropzone);
+    kmapVariablesDropzone.innerHTML = '';
+    if (kmapDialogSelections.variableTokens.length) {
+      kmapDialogSelections.variableTokens.forEach((tk, idx) => {
+        kmapVariablesDropzone.appendChild(renderKmapDialogToken(tk, idx));
+      });
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'kmap-expr-placeholder';
+      placeholder.textContent = 'Drag columns here to set the variable order (min 2, max 6)';
+      kmapVariablesDropzone.appendChild(placeholder);
+    }
+  }
+}
+
 function resetKmapDialog() {
-  kmapLabelInput.value = kmapFormMemory.label || '';
-  kmapVariablesInput.value = kmapFormMemory.variables || '';
+  ensureTransitionTableStructure();
+  renderKmapDialogTray();
+  kmapDialogSelections = {
+    functionToken: cloneColumnToken(kmapFormMemory.functionToken),
+    variableTokens: (kmapFormMemory.variableTokens || [])
+      .map((tk) => cloneColumnToken(tk))
+      .filter(Boolean),
+  };
   kmapTypeInput.value = kmapFormMemory.type || 'sop';
   kmapDirectionInput.value = kmapFormMemory.direction || 'horizontal';
+  renderKmapDialogDropzones();
   confirmKmapCreate.disabled = true;
 }
 
 function validateKmapDialog() {
-  const vars = parseKmapVariables(kmapVariablesInput.value);
-  const label = kmapLabelInput.value.trim();
-  const isValid = vars.length >= 2 && vars.length <= 6 && label.length > 0;
+  const varCount = kmapDialogSelections.variableTokens.length;
+  const isValid = !!kmapDialogSelections.functionToken && varCount >= 2 && varCount <= 6;
   confirmKmapCreate.disabled = !isValid;
+}
+
+function kmapDialogTokenFromElement(el) {
+  if (!el) return null;
+  return cloneColumnToken({
+    key: el.dataset.tokenValue,
+    baseKey: el.dataset.tokenBaseKey,
+    label: el.dataset.tokenLabel,
+    type: el.dataset.tokenType || 'value',
+  });
+}
+
+function handleKmapDialogDragStart(e) {
+  const token = e.target.closest('.kmap-dialog-token');
+  if (!token) return;
+  const source = token.closest('#kmapLabelDropzone')
+    ? 'label'
+    : token.closest('#kmapVariablesDropzone')
+      ? 'variables'
+      : 'tray';
+  const fromIndex = source === 'variables' ? parseInt(token.dataset.index, 10) : null;
+  const payloadToken = kmapDialogTokenFromElement(token);
+  kmapDialogDragState = { source, fromIndex, token: payloadToken };
+  if (e.dataTransfer && payloadToken) {
+    e.dataTransfer.setData('text/plain', `${payloadToken.type}:${payloadToken.key}`);
+  }
+}
+
+function handleKmapDialogDragOver(e) {
+  const labelZone = e.target.closest('#kmapLabelDropzone');
+  const varZone = e.target.closest('#kmapVariablesDropzone');
+  if (!labelZone && !varZone) return;
+  e.preventDefault();
+  if (labelZone) {
+    labelZone.classList.add('kmap-dialog-drop-hover');
+    return;
+  }
+  const marker = ensureDropMarker(varZone);
+  const targetToken = e.target.closest('.kmap-expr-token');
+  if (targetToken && targetToken.parentNode === varZone) {
+    const rect = targetToken.getBoundingClientRect();
+    const before = e.clientX < rect.left + rect.width / 2;
+    varZone.insertBefore(marker, before ? targetToken : targetToken.nextSibling);
+  } else if (!marker.parentNode) {
+    varZone.appendChild(marker);
+  }
+  const sequence = [...varZone.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+  const markerIndex = sequence.indexOf(marker);
+  marker.dataset.index = markerIndex === -1 ? sequence.length : markerIndex;
+}
+
+function handleKmapDialogDragLeave(e) {
+  const labelZone = e.target.closest('#kmapLabelDropzone');
+  const varZone = e.target.closest('#kmapVariablesDropzone');
+  if (labelZone && !labelZone.contains(e.relatedTarget)) {
+    labelZone.classList.remove('kmap-dialog-drop-hover');
+  }
+  if (varZone && !varZone.contains(e.relatedTarget)) {
+    clearDropMarker(varZone);
+  }
+}
+
+function handleKmapDialogDrop(e) {
+  const labelZone = e.target.closest('#kmapLabelDropzone');
+  const varZone = e.target.closest('#kmapVariablesDropzone');
+  if (!labelZone && !varZone) return;
+  e.preventDefault();
+  const payload = kmapDialogDragState;
+  kmapDialogDragState = null;
+  if (!payload || !payload.token) return;
+
+  if (labelZone) {
+    labelZone.classList.remove('kmap-dialog-drop-hover');
+    if (payload.source === 'variables' && payload.fromIndex !== null) {
+      kmapDialogSelections.variableTokens.splice(payload.fromIndex, 1);
+    }
+    kmapDialogSelections.functionToken = cloneColumnToken(payload.token);
+    renderKmapDialogDropzones();
+    validateKmapDialog();
+    return;
+  }
+
+  if (varZone) {
+    const marker = varZone.querySelector('.kmap-drop-marker');
+    const sequence = [...varZone.querySelectorAll('.kmap-expr-token, .kmap-drop-marker')];
+    const markerIndex = marker ? sequence.indexOf(marker) : -1;
+    let index = markerIndex === -1 ? sequence.filter((el) => el.classList.contains('kmap-expr-token')).length : markerIndex;
+    clearDropMarker(varZone);
+
+    const tokens = [...kmapDialogSelections.variableTokens];
+    if (payload.source === 'variables' && payload.fromIndex !== null && payload.fromIndex < tokens.length) {
+      tokens.splice(payload.fromIndex, 1);
+      if (payload.fromIndex < index) index -= 1;
+    }
+    if (payload.source === 'label') {
+      kmapDialogSelections.functionToken = null;
+    }
+
+    const newToken = cloneColumnToken(payload.token);
+    if (payload.source !== 'variables' && tokens.length >= 6) {
+      tokens[tokens.length - 1] = newToken;
+    } else {
+      tokens.splice(Math.max(0, Math.min(tokens.length, index)), 0, newToken);
+    }
+
+    kmapDialogSelections.variableTokens = tokens.slice(0, 6);
+    renderKmapDialogDropzones();
+    validateKmapDialog();
+  }
+}
+
+function handleKmapDialogDragEnd() {
+  if (kmapLabelDropzone) kmapLabelDropzone.classList.remove('kmap-dialog-drop-hover');
+  if (kmapVariablesDropzone) clearDropMarker(kmapVariablesDropzone);
+  kmapDialogDragState = null;
 }
 
 function openKmapDialog() {
@@ -2785,11 +3011,17 @@ function openKmapDialog() {
 }
 
 function createKmapFromDialog() {
-  const variables = parseKmapVariables(kmapVariablesInput.value);
-  const label = kmapLabelInput.value.trim() || 'K-map';
+  const functionToken = cloneColumnToken(kmapDialogSelections.functionToken);
+  const variableTokens = kmapDialogSelections.variableTokens
+    .map((tk) => cloneColumnToken(tk))
+    .filter(Boolean)
+    .slice(0, 6);
+  const variables = variableTokens.map((tk) => tokenLabel(tk));
+  const label = tokenLabel(functionToken) || 'K-map';
   kmapFormMemory = {
     label,
-    variables: kmapVariablesInput.value,
+    functionToken,
+    variableTokens,
     type: kmapTypeInput.value,
     direction: kmapDirectionInput.value,
   };
@@ -2801,6 +3033,8 @@ function createKmapFromDialog() {
     direction: kmapDirectionInput.value,
     cells: {},
     expression: '',
+    functionToken,
+    variableTokens,
   };
   state.kmaps.push(newMap);
   renderKmaps();
@@ -3330,8 +3564,13 @@ function attachEvents() {
   document.getElementById('newKmapBtn').addEventListener('click', openKmapDialog);
   document.getElementById('closeKmapWindow').addEventListener('click', closeKmapWindow);
   confirmKmapCreate.addEventListener('click', createKmapFromDialog);
-  kmapLabelInput.addEventListener('input', validateKmapDialog);
-  kmapVariablesInput.addEventListener('input', validateKmapDialog);
+  if (kmapCreateDialog) {
+    kmapCreateDialog.addEventListener('dragstart', handleKmapDialogDragStart);
+    kmapCreateDialog.addEventListener('dragover', handleKmapDialogDragOver);
+    kmapCreateDialog.addEventListener('dragleave', handleKmapDialogDragLeave);
+    kmapCreateDialog.addEventListener('drop', handleKmapDialogDrop);
+    kmapCreateDialog.addEventListener('dragend', handleKmapDialogDragEnd);
+  }
   kmapWindowHeader.addEventListener('mousedown', (e) => {
     if (e.target.closest('button')) return;
     const rect = kmapWindow.getBoundingClientRect();
