@@ -89,6 +89,7 @@ let kmapFormMemory = {
 };
 let kmapExpressionDragState = null;
 let kmapDialogSelections = { functionToken: null, variableTokens: [] };
+let kmapDialogActiveSelection = null;
 let kmapDialogDragState = null;
 let transitionColumnDragState = null;
 let showKmapCircles = false;
@@ -2843,7 +2844,11 @@ function renderKmapDialogDropzones() {
     clearDropMarker(kmapLabelDropzone);
     kmapLabelDropzone.innerHTML = '';
     if (kmapDialogSelections.functionToken) {
-      kmapLabelDropzone.appendChild(renderKmapDialogToken(kmapDialogSelections.functionToken));
+      const tokenEl = renderKmapDialogToken(kmapDialogSelections.functionToken);
+      if (kmapDialogActiveSelection && kmapDialogActiveSelection.zone === 'label') {
+        tokenEl.classList.add('selected');
+      }
+      kmapLabelDropzone.appendChild(tokenEl);
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'kmap-expr-placeholder';
@@ -2857,7 +2862,15 @@ function renderKmapDialogDropzones() {
     kmapVariablesDropzone.innerHTML = '';
     if (kmapDialogSelections.variableTokens.length) {
       kmapDialogSelections.variableTokens.forEach((tk, idx) => {
-        kmapVariablesDropzone.appendChild(renderKmapDialogToken(tk, idx));
+        const tokenEl = renderKmapDialogToken(tk, idx);
+        if (
+          kmapDialogActiveSelection &&
+          kmapDialogActiveSelection.zone === 'variables' &&
+          kmapDialogActiveSelection.index === idx
+        ) {
+          tokenEl.classList.add('selected');
+        }
+        kmapVariablesDropzone.appendChild(tokenEl);
       });
     } else {
       const placeholder = document.createElement('div');
@@ -2865,6 +2878,34 @@ function renderKmapDialogDropzones() {
       placeholder.textContent = 'Drag columns here to set the variable order (min 2, max 6)';
       kmapVariablesDropzone.appendChild(placeholder);
     }
+  }
+}
+
+function clearKmapDialogSelection() {
+  kmapDialogActiveSelection = null;
+  if (kmapCreateDialog) {
+    kmapCreateDialog.querySelectorAll('.kmap-dialog-token.selected').forEach((el) => {
+      el.classList.remove('selected');
+    });
+  }
+}
+
+function setKmapDialogSelection(zone, index = null) {
+  kmapDialogActiveSelection = zone ? { zone, index } : null;
+  if (!kmapCreateDialog) return;
+  kmapCreateDialog.querySelectorAll('.kmap-dialog-token').forEach((el) => {
+    el.classList.remove('selected');
+  });
+  if (!kmapDialogActiveSelection) return;
+  if (zone === 'label' && kmapLabelDropzone) {
+    const tk = kmapLabelDropzone.querySelector('.kmap-dialog-token');
+    if (tk) tk.classList.add('selected');
+    return;
+  }
+  if (zone === 'variables' && kmapVariablesDropzone) {
+    const tokens = kmapVariablesDropzone.querySelectorAll('.kmap-dialog-token');
+    const tk = tokens[index];
+    if (tk) tk.classList.add('selected');
   }
 }
 
@@ -2877,6 +2918,7 @@ function resetKmapDialog() {
       .map((tk) => cloneColumnToken(tk))
       .filter(Boolean),
   };
+  clearKmapDialogSelection();
   kmapTypeInput.value = kmapFormMemory.type || 'sop';
   kmapDirectionInput.value = kmapFormMemory.direction || 'horizontal';
   renderKmapDialogDropzones();
@@ -2964,6 +3006,7 @@ function handleKmapDialogDrop(e) {
       kmapDialogSelections.variableTokens.splice(payload.fromIndex, 1);
     }
     kmapDialogSelections.functionToken = cloneColumnToken(payload.token);
+    setKmapDialogSelection('label');
     renderKmapDialogDropzones();
     validateKmapDialog();
     return;
@@ -2986,13 +3029,62 @@ function handleKmapDialogDrop(e) {
     }
 
     const newToken = cloneColumnToken(payload.token);
+    let selectionIndex = index;
     if (payload.source !== 'variables' && tokens.length >= 6) {
+      selectionIndex = tokens.length - 1;
       tokens[tokens.length - 1] = newToken;
     } else {
-      tokens.splice(Math.max(0, Math.min(tokens.length, index)), 0, newToken);
+      selectionIndex = Math.max(0, Math.min(tokens.length, index));
+      tokens.splice(selectionIndex, 0, newToken);
     }
 
     kmapDialogSelections.variableTokens = tokens.slice(0, 6);
+    setKmapDialogSelection('variables', Math.min(selectionIndex, kmapDialogSelections.variableTokens.length - 1));
+    renderKmapDialogDropzones();
+    validateKmapDialog();
+  }
+}
+
+function handleKmapDialogClick(e) {
+  const token = e.target.closest('.kmap-dialog-token');
+  if (!token) return;
+  if (token.closest('#kmapLabelDropzone')) {
+    setKmapDialogSelection('label');
+    return;
+  }
+  const idx = parseInt(token.dataset.index, 10);
+  setKmapDialogSelection('variables', Number.isNaN(idx) ? null : idx);
+}
+
+function handleKmapDialogKeyDown(e) {
+  if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+  let zone = kmapDialogActiveSelection ? kmapDialogActiveSelection.zone : null;
+  let index = kmapDialogActiveSelection ? kmapDialogActiveSelection.index : null;
+  const dropTarget = e.target.closest('#kmapLabelDropzone, #kmapVariablesDropzone');
+  if (!zone && dropTarget) zone = dropTarget.id === 'kmapLabelDropzone' ? 'label' : 'variables';
+
+  if (zone === 'label') {
+    if (!kmapDialogSelections.functionToken) return;
+    e.preventDefault();
+    kmapDialogSelections.functionToken = null;
+    clearKmapDialogSelection();
+    renderKmapDialogDropzones();
+    validateKmapDialog();
+    return;
+  }
+
+  if (zone === 'variables') {
+    if (!kmapDialogSelections.variableTokens.length) return;
+    e.preventDefault();
+    const idx = index === null || index === undefined
+      ? kmapDialogSelections.variableTokens.length - 1
+      : Math.max(0, Math.min(kmapDialogSelections.variableTokens.length - 1, index));
+    kmapDialogSelections.variableTokens.splice(idx, 1);
+    if (kmapDialogSelections.variableTokens.length) {
+      setKmapDialogSelection('variables', Math.min(idx, kmapDialogSelections.variableTokens.length - 1));
+    } else {
+      clearKmapDialogSelection();
+    }
     renderKmapDialogDropzones();
     validateKmapDialog();
   }
@@ -3570,6 +3662,8 @@ function attachEvents() {
     kmapCreateDialog.addEventListener('dragleave', handleKmapDialogDragLeave);
     kmapCreateDialog.addEventListener('drop', handleKmapDialogDrop);
     kmapCreateDialog.addEventListener('dragend', handleKmapDialogDragEnd);
+    kmapCreateDialog.addEventListener('click', handleKmapDialogClick);
+    kmapCreateDialog.addEventListener('keydown', handleKmapDialogKeyDown);
   }
   kmapWindowHeader.addEventListener('mousedown', (e) => {
     if (e.target.closest('button')) return;
