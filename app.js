@@ -80,6 +80,11 @@ const kmapResizeHandle = document.getElementById('kmapResizeHandle');
 const transitionColumnBuilder = document.getElementById('transitionColumnBuilder');
 const toggleTransitionBuilderBtn = document.getElementById('toggleTransitionBuilder');
 
+if (kmapTypeInput) {
+  kmapTypeInput.disabled = true;
+  kmapTypeInput.title = 'Only SOP mode is available right now';
+}
+
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
 let kmapFormMemory = {
   functionToken: null,
@@ -4149,6 +4154,12 @@ function attachEvents() {
   kmapList.addEventListener('dragstart', (e) => {
     const tokenEl = e.target.closest('.kmap-token, .kmap-expr-token');
     if (!tokenEl) return;
+    if (
+      tokenEl.classList.contains('kmap-expr-token') ||
+      tokenEl.classList.contains('kmap-token')
+    ) {
+      setShowKmapCircles(false);
+    }
     const type = tokenEl.dataset.tokenType;
     const value = tokenEl.dataset.tokenValue;
     const fromIndex = tokenEl.classList.contains('kmap-expr-token')

@@ -583,8 +583,10 @@ def assignment_from_key(key: str, variables: List[str]) -> Dict[str, int]:
     return {var: int(bit) for var, bit in zip(variables, key)}
 
 
-def resolve_kmap_target(label: str) -> Optional[Tuple[str, int]]:
-    """Infer whether a K-map targets a next-state bit or an output column."""
+def resolve_kmap_target_from_label(
+    label: str, next_cols: List[Mapping[str, object]], output_cols: List[Mapping[str, object]]
+) -> Optional[Tuple[str, Optional[int]]]:
+    """Infer whether a K-map targets a next-state bit or an output column via its label."""
 
     cleaned = re.sub(r"\s+", "", str(label)).upper()
     cleaned = cleaned.replace("^+", "").replace("+", "")
@@ -594,9 +596,43 @@ def resolve_kmap_target(label: str) -> Optional[Tuple[str, int]]:
     idx = int(match.group(1))
     prefix = cleaned[: match.start(1)].rstrip("_")
     if prefix in {"Q", "NEXTQ", "Q"}:
-        return ("next", idx)
-    if prefix in {"OUT", "OUTPUT", "Y", "Z"}:
-        return ("output", idx)
+        target_cols = next_cols
+        kind = "next"
+    elif prefix in {"OUT", "OUTPUT", "Y", "Z"}:
+        target_cols = output_cols
+        kind = "output"
+    else:
+        return None
+
+    for col_idx, col in enumerate(target_cols):
+        base_key = str(col.get("baseKey") or col.get("key") or "").lower()
+        if base_key.endswith(f"_{idx}"):
+            return kind, col_idx
+    return kind, None
+
+
+def resolve_kmap_target_from_token(
+    token: Mapping[str, object], next_cols: List[Mapping[str, object]], output_cols: List[Mapping[str, object]]
+) -> Optional[Tuple[str, Optional[int]]]:
+    """Resolve the target column for a K-map using its function token."""
+
+    if not token:
+        return None
+
+    base_key = str(token.get("baseKey") or token.get("key") or "")
+    base_key = base_key.split("__", maxsplit=1)[0].lower()
+
+    def find_index(columns: List[Mapping[str, object]]) -> Optional[int]:
+        for idx, col in enumerate(columns):
+            col_base = str(col.get("baseKey") or col.get("key") or "").split("__", maxsplit=1)[0].lower()
+            if col_base == base_key:
+                return idx
+        return None
+
+    if base_key.startswith("next_q_"):
+        return "next", find_index(next_cols)
+    if base_key.startswith("out_"):
+        return "output", find_index(output_cols)
     return None
 
 
@@ -810,14 +846,27 @@ def grade_kmaps(
     expression_weighted_score = 0.0
     expression_weight_total = 0
     notes: List[str] = []
+    targeted_next: set[int] = set()
+    targeted_outputs: set[int] = set()
 
     for kmap in kmaps:
         label = kmap.get("label") or "(unnamed)"
-        target = resolve_kmap_target(label)
+        function_token = kmap.get("functionToken") or {}
+        target = resolve_kmap_target_from_token(function_token, next_cols, output_cols)
+        if target is None:
+            target = resolve_kmap_target_from_label(label, next_cols, output_cols)
         if target is None:
             notes.append(f"K-map {label}: unable to determine target column")
             continue
         target_kind, target_idx = target
+        if target_idx is None:
+            base_key = (function_token.get("baseKey") or function_token.get("key") or label or "").strip()
+            notes.append(f"K-map {label}: target column {base_key or target_kind} not found in transition table")
+            continue
+        if target_kind == "next":
+            targeted_next.add(target_idx)
+        else:
+            targeted_outputs.add(target_idx)
         variables_table, variables = build_kmap_truth_table(kmap)
         state_vars = [v for v in variables if normalize_var_name(v).startswith("Q")]
         input_vars = [v for v in variables if not normalize_var_name(v).startswith("Q")]
@@ -879,6 +928,15 @@ def grade_kmaps(
         expr_score = correctness_ratio * (0.5 if not minimized else 1.0)
         expression_weighted_score += expr_score * non_x
         expression_weight_total += non_x
+
+    for idx in range(len(next_cols)):
+        if idx not in targeted_next:
+            notes.append(f"Missing K-map for next-state bit column {next_cols[idx].get('baseKey', idx)}")
+            completeness_checked += 1
+    for idx in range(len(output_cols)):
+        if idx not in targeted_outputs:
+            notes.append(f"Missing K-map for output column {output_cols[idx].get('baseKey', idx)}")
+            completeness_checked += 1
 
     completeness_ratio = completeness_matches / (completeness_checked or 1)
     expression_ratio = expression_weighted_score / (expression_weight_total or 1)
