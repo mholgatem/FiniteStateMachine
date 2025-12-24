@@ -2375,12 +2375,11 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
 
   const baseRows = layout?.baseRows || 1;
   const baseCols = layout?.baseCols || 1;
-  const clusters = [];
+
   const visited = new Set();
   const byPosition = new Map();
 
   cells.forEach((entry, idx) => {
-    // Each entry is { rect, cell }; use the logical cell for adjacency checks
     const { cell } = entry;
     const key = `${cell.submap?.mapRow || 0}-${cell.submap?.mapCol || 0}-${cell.row}-${cell.col}`;
     byPosition.set(key, { idx, cell });
@@ -2395,10 +2394,12 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
     const { submap, row, col } = cell;
     const localRow = row - (submap?.rowOffset || 0);
     const localCol = col - (submap?.colOffset || 0);
+
     const upRow = ((localRow - 1 + baseRows) % baseRows) + (submap?.rowOffset || 0);
     const downRow = ((localRow + 1) % baseRows) + (submap?.rowOffset || 0);
     const leftCol = ((localCol - 1 + baseCols) % baseCols) + (submap?.colOffset || 0);
     const rightCol = ((localCol + 1) % baseCols) + (submap?.colOffset || 0);
+
     return [
       findNeighbor(submap, upRow, col),
       findNeighbor(submap, downRow, col),
@@ -2407,35 +2408,43 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
     ].filter((v) => v !== undefined);
   };
 
+  const logicalClusters = [];
   const stack = [];
-  const addCluster = (seedIdx) => {
+
+  const buildCluster = (seedIdx) => {
     stack.length = 0;
     stack.push(seedIdx);
-    const rects = [];
     visited.add(seedIdx);
+
+    const rects = [];
     while (stack.length) {
       const idx = stack.pop();
-      const { rect, cell } = cells[idx];
-      rects.push(rect);
-      neighbors(cell).forEach((nIdx) => {
+      rects.push(cells[idx].rect);
+
+      neighbors(cells[idx].cell).forEach((nIdx) => {
         if (!visited.has(nIdx)) {
           visited.add(nIdx);
           stack.push(nIdx);
         }
       });
     }
-    clusters.push(rects);
+    logicalClusters.push(rects);
   };
 
-  cells.forEach((entry, idx) => {
-    if (!visited.has(idx)) addCluster(idx);
+  cells.forEach((_, idx) => {
+    if (!visited.has(idx)) buildCluster(idx);
   });
 
-  // Preserve the logical clusters, then group purely by spatial distance so wrapping
-  // cells don't merge into a single bounding box unless they are actually adjacent.
-  const flatRects = clusters.flat();
+  // IMPORTANT:
+  // For EACH logical cluster, do a spatial merge *within that cluster only*.
+  // This produces 1+ boxes per logical cluster (wrap => typically 2 boxes).
+  const out = [];
+  logicalClusters.forEach((rects, groupId) => {
+    const boxes = clusterRects(rects, threshold);
+    boxes.forEach((b) => out.push({ ...b, groupId }));
+  });
 
-  return clusterRects(flatRects, threshold);
+  return out;
 }
 
 function splitExpressionSections(tokens = []) {
@@ -2506,7 +2515,8 @@ function renderKmapCircles(root = null) {
       const canonical = tokensToCanonical(sectionTokens);
       const sectionTable = buildExpressionTruthTable(canonical, variables);
       if (!sectionTable) return;
-      const padding = -4;
+      const computePadding = 5;
+      const drawPadding = -4;
       const activeCells = cells
         .map((cell) => {
           if (sectionTable.get(cell.key) !== '1') return null;
@@ -2516,10 +2526,10 @@ function renderKmapCircles(root = null) {
           const rect = target.getBoundingClientRect();
           return {
             rect: {
-              minX: rect.left - overlayRect.left - padding,
-              minY: rect.top - overlayRect.top - padding,
-              maxX: rect.right - overlayRect.left + padding,
-              maxY: rect.bottom - overlayRect.top + padding,
+              minX: rect.left - overlayRect.left - computePadding,
+              minY: rect.top - overlayRect.top - computePadding,
+              maxX: rect.right - overlayRect.left + computePadding,
+              maxY: rect.bottom - overlayRect.top + computePadding,
             },
             cell,
           };
@@ -2531,13 +2541,19 @@ function renderKmapCircles(root = null) {
       const clusters = clusterCellsWithWrap(activeCells, layout, 32);
       const strokeColor = kmapCirclePalette[(paletteOffset + sectionIdx) % kmapCirclePalette.length];
       const fillColor = colorWithAlpha(strokeColor, 0.12);
+      const paddingAdjustment = computePadding - drawPadding;
 
       clusters.forEach((cl) => {
         const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rectEl.setAttribute('x', cl.minX);
-        rectEl.setAttribute('y', cl.minY);
-        rectEl.setAttribute('width', cl.maxX - cl.minX);
-        rectEl.setAttribute('height', cl.maxY - cl.minY);
+        const minX = cl.minX + paddingAdjustment;
+        const minY = cl.minY + paddingAdjustment;
+        const maxX = cl.maxX - paddingAdjustment;
+        const maxY = cl.maxY - paddingAdjustment;
+
+        rectEl.setAttribute('x', minX);
+        rectEl.setAttribute('y', minY);
+        rectEl.setAttribute('width', maxX - minX);
+        rectEl.setAttribute('height', maxY - minY);
         rectEl.setAttribute('rx', 14);
         rectEl.setAttribute('ry', 14);
         rectEl.setAttribute('fill', fillColor);
