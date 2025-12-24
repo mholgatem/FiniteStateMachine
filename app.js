@@ -2515,7 +2515,8 @@ function renderKmapCircles(root = null) {
       const canonical = tokensToCanonical(sectionTokens);
       const sectionTable = buildExpressionTruthTable(canonical, variables);
       if (!sectionTable) return;
-      const padding = -4;
+      const computePadding = 5;
+      const drawPadding = -4;
       const activeCells = cells
         .map((cell) => {
           if (sectionTable.get(cell.key) !== '1') return null;
@@ -2525,10 +2526,10 @@ function renderKmapCircles(root = null) {
           const rect = target.getBoundingClientRect();
           return {
             rect: {
-              minX: rect.left - overlayRect.left - padding,
-              minY: rect.top - overlayRect.top - padding,
-              maxX: rect.right - overlayRect.left + padding,
-              maxY: rect.bottom - overlayRect.top + padding,
+              minX: rect.left - overlayRect.left - computePadding,
+              minY: rect.top - overlayRect.top - computePadding,
+              maxX: rect.right - overlayRect.left + computePadding,
+              maxY: rect.bottom - overlayRect.top + computePadding,
             },
             cell,
           };
@@ -2540,13 +2541,19 @@ function renderKmapCircles(root = null) {
       const clusters = clusterCellsWithWrap(activeCells, layout, 32);
       const strokeColor = kmapCirclePalette[(paletteOffset + sectionIdx) % kmapCirclePalette.length];
       const fillColor = colorWithAlpha(strokeColor, 0.12);
+      const paddingAdjustment = computePadding - drawPadding;
 
       clusters.forEach((cl) => {
         const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rectEl.setAttribute('x', cl.minX);
-        rectEl.setAttribute('y', cl.minY);
-        rectEl.setAttribute('width', cl.maxX - cl.minX);
-        rectEl.setAttribute('height', cl.maxY - cl.minY);
+        const minX = cl.minX + paddingAdjustment;
+        const minY = cl.minY + paddingAdjustment;
+        const maxX = cl.maxX - paddingAdjustment;
+        const maxY = cl.maxY - paddingAdjustment;
+
+        rectEl.setAttribute('x', minX);
+        rectEl.setAttribute('y', minY);
+        rectEl.setAttribute('width', maxX - minX);
+        rectEl.setAttribute('height', maxY - minY);
         rectEl.setAttribute('rx', 14);
         rectEl.setAttribute('ry', 14);
         rectEl.setAttribute('fill', fillColor);
