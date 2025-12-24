@@ -2375,12 +2375,11 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
 
   const baseRows = layout?.baseRows || 1;
   const baseCols = layout?.baseCols || 1;
-  const clusters = [];
+
   const visited = new Set();
   const byPosition = new Map();
 
   cells.forEach((entry, idx) => {
-    // Each entry is { rect, cell }; use the logical cell for adjacency checks
     const { cell } = entry;
     const key = `${cell.submap?.mapRow || 0}-${cell.submap?.mapCol || 0}-${cell.row}-${cell.col}`;
     byPosition.set(key, { idx, cell });
@@ -2395,10 +2394,12 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
     const { submap, row, col } = cell;
     const localRow = row - (submap?.rowOffset || 0);
     const localCol = col - (submap?.colOffset || 0);
+
     const upRow = ((localRow - 1 + baseRows) % baseRows) + (submap?.rowOffset || 0);
     const downRow = ((localRow + 1) % baseRows) + (submap?.rowOffset || 0);
     const leftCol = ((localCol - 1 + baseCols) % baseCols) + (submap?.colOffset || 0);
     const rightCol = ((localCol + 1) % baseCols) + (submap?.colOffset || 0);
+
     return [
       findNeighbor(submap, upRow, col),
       findNeighbor(submap, downRow, col),
@@ -2407,35 +2408,43 @@ function clusterCellsWithWrap(cells, layout, threshold = 28) {
     ].filter((v) => v !== undefined);
   };
 
+  const logicalClusters = [];
   const stack = [];
-  const addCluster = (seedIdx) => {
+
+  const buildCluster = (seedIdx) => {
     stack.length = 0;
     stack.push(seedIdx);
-    const rects = [];
     visited.add(seedIdx);
+
+    const rects = [];
     while (stack.length) {
       const idx = stack.pop();
-      const { rect, cell } = cells[idx];
-      rects.push(rect);
-      neighbors(cell).forEach((nIdx) => {
+      rects.push(cells[idx].rect);
+
+      neighbors(cells[idx].cell).forEach((nIdx) => {
         if (!visited.has(nIdx)) {
           visited.add(nIdx);
           stack.push(nIdx);
         }
       });
     }
-    clusters.push(rects);
+    logicalClusters.push(rects);
   };
 
-  cells.forEach((entry, idx) => {
-    if (!visited.has(idx)) addCluster(idx);
+  cells.forEach((_, idx) => {
+    if (!visited.has(idx)) buildCluster(idx);
   });
 
-  // Preserve the logical clusters, then group purely by spatial distance so wrapping
-  // cells don't merge into a single bounding box unless they are actually adjacent.
-  const flatRects = clusters.flat();
+  // IMPORTANT:
+  // For EACH logical cluster, do a spatial merge *within that cluster only*.
+  // This produces 1+ boxes per logical cluster (wrap => typically 2 boxes).
+  const out = [];
+  logicalClusters.forEach((rects, groupId) => {
+    const boxes = clusterRects(rects, threshold);
+    boxes.forEach((b) => out.push({ ...b, groupId }));
+  });
 
-  return clusterRects(flatRects, threshold);
+  return out;
 }
 
 function splitExpressionSections(tokens = []) {
