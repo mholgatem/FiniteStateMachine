@@ -366,10 +366,6 @@ body {
   font-size: 0.82em;
 }
 
-.table-panel-wrapper {
-  position: relative;
-}
-
 .state-palette {
   border-right: 1px solid var(--border);
   background: var(--surface);
@@ -405,21 +401,6 @@ body {
   background: transparent;
 }
 
-.table-panel {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  max-height: 420px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-}
-
-.table-panel.collapsed {
-  max-height: 0;
-  border-bottom: none;
-  overflow: hidden;
-}
-
 .table-controls {
   display: flex;
   gap: 0.75rem;
@@ -433,35 +414,37 @@ body {
   max-height: 320px;
 }
 
-.table-toggle {
-  position: absolute;
-  bottom: -28px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 96px;
-  height: 38px;
-  border-radius: 0 0 18px 18px;
-  background: linear-gradient(180deg, var(--accent) 0%, var(--surface) 65%);
-  border: 1px solid var(--border);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18), inset 0 4px 10px rgba(255, 255, 255, 0.5), inset 0 -5px 12px rgba(0, 0, 0, 0.08);
-  font-size: 22px;
-  color: var(--text);
-  display: inline-flex;
+.state-definition-dialog {
+  width: min(1100px, 95vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.state-definition-dialog .dialog-header {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), 0 -1px 0 rgba(0, 0, 0, 0.15);
-  transition: box-shadow 0.2s ease, filter 0.2s ease;
-  z-index: 5;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
-.table-toggle:hover {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2), inset 0 4px 10px rgba(255, 255, 255, 0.55), inset 0 -5px 12px rgba(0, 0, 0, 0.08), 0 0 14px rgba(74, 108, 247, 0.35);
+.state-definition-dialog .dialog-actions.end {
+  justify-content: flex-end;
 }
 
-.table-toggle:active {
-  transform: translateX(-50%);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18), inset 0 4px 10px rgba(255, 255, 255, 0.5), inset 0 -5px 12px rgba(0, 0, 0, 0.08);
+.state-definition-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow: hidden;
 }
+
+.state-definition-body .table-wrapper {
+  flex: 1;
+  max-height: none;
+}
+
 
 .table-wrapper table {
   width: 100%;

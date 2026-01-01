@@ -39,9 +39,9 @@ const viewport = document.getElementById('viewport');
 const paletteList = document.getElementById('paletteList');
 const palettePane = document.querySelector('.state-palette');
 const stateTableBody = document.querySelector('#stateTable tbody');
-const toggleTableBtn = document.getElementById('toggleTable');
 const toggleIoModeBtn = document.getElementById('toggleIoMode');
-const tablePanel = document.getElementById('tablePanel');
+const stateDefinitionDialog = document.getElementById('stateDefinitionDialog');
+const stateDefinitionContent = document.getElementById('stateDefinitionContent');
 const toolbarTitle = document.getElementById('toolbarTitle');
 const mealyOutputRow = document.getElementById('mealyOutputRow');
 const inputChoices = document.getElementById('inputChoices');
@@ -163,10 +163,13 @@ function clearVerificationStatus() {
   }
 }
 
-function setDefinitionTableExpanded(expanded) {
-  if (!tablePanel || !toggleTableBtn) return;
-  tablePanel.classList.toggle('collapsed', !expanded);
-  toggleTableBtn.textContent = expanded ? '▴' : '▾';
+function setDefinitionDialogOpen(open) {
+  if (!stateDefinitionDialog) return;
+  stateDefinitionDialog.classList.toggle('hidden', !open);
+  if (open) {
+    const focusTarget = stateDefinitionDialog.querySelector('input, select, button');
+    if (focusTarget) focusTarget.focus();
+  }
 }
 
 function setVerificationStatus(passed, message, matchPercent) {
@@ -451,7 +454,6 @@ function updateControls() {
   document.querySelectorAll('.moore-only').forEach((el) => {
     el.classList.toggle('hidden', state.type !== 'moore');
   });
-  toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
   toggleIoModeBtn.textContent = `Display: ${state.showBinary ? 'Variables' : 'Binary'}`;
 }
 
@@ -1587,7 +1589,7 @@ function loadState(data) {
   viewState = { scale: 1, panX: 0, panY: 0 };
   applyViewTransform();
   updateControls();
-  setDefinitionTableExpanded(false);
+  setDefinitionDialogOpen(false);
   renderTable();
   renderPalette();
   renderTransitionTable();
@@ -3231,7 +3233,7 @@ function captureImage(element, filename) {
     tempStyle(scrollableChild, { width: `${width}px`, height: `${height}px` });
   }
 
-  html2canvas(element, {
+  return html2canvas(element, {
     backgroundColor: captureBg,
     width,
     height,
@@ -3248,6 +3250,19 @@ function captureImage(element, filename) {
     .finally(() => {
       cleanups.reverse().forEach((fn) => fn());
     });
+}
+
+function captureDefinitionTableImage() {
+  if (!stateDefinitionDialog) return;
+  const target = stateDefinitionContent || stateDefinitionDialog;
+  const wasHidden = stateDefinitionDialog.classList.contains('hidden');
+  if (wasHidden) stateDefinitionDialog.classList.remove('hidden');
+
+  requestAnimationFrame(() => {
+    captureImage(target, `${state.name}-state-definition-table.png`).finally(() => {
+      if (wasHidden) stateDefinitionDialog.classList.add('hidden');
+    });
+  });
 }
 
 function openTransitionDrawer() {
@@ -3649,6 +3664,9 @@ function attachEvents() {
     promptToSaveIfDirty(() => openDialog('newMachineDialog'));
   });
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
+  document.getElementById('stateDefinitionBtn').addEventListener('click', () => {
+    setDefinitionDialogOpen(true);
+  });
   if (transitionTableHelpBtn && transitionTableHelpDialog) {
     transitionTableHelpBtn.addEventListener('click', () => openDialog('transitionTableHelpDialog'));
   }
@@ -3747,7 +3765,7 @@ function attachEvents() {
     applyViewTransform();
     initStates();
     updateControls();
-    setDefinitionTableExpanded(true);
+    setDefinitionDialogOpen(true);
     renderTable();
     renderPalette();
     renderTransitionTable();
@@ -3829,7 +3847,7 @@ function attachEvents() {
   });
   document.getElementById('saveImageTable').addEventListener('click', () => {
     closeAllDropdowns();
-    captureImage(tablePanel, `${state.name}-state-definition-table.png`);
+    captureDefinitionTableImage();
   });
   document.getElementById('saveImageDiagram').addEventListener('click', () => {
     closeAllDropdowns();
@@ -3842,11 +3860,6 @@ function attachEvents() {
   document.getElementById('saveImageKmaps').addEventListener('click', () => {
     closeAllDropdowns();
     captureKmapImagesZip();
-  });
-
-  toggleTableBtn.addEventListener('click', () => {
-    tablePanel.classList.toggle('collapsed');
-    toggleTableBtn.textContent = tablePanel.classList.contains('collapsed') ? '▾' : '▴';
   });
 
   toggleIoModeBtn.addEventListener('click', () => {
@@ -4609,7 +4622,7 @@ function attachEvents() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       const activeEl = document.activeElement;
       const tablesHaveFocus =
-        (tablePanel && tablePanel.contains(activeEl)) ||
+        (stateDefinitionDialog && stateDefinitionDialog.contains(activeEl)) ||
         (transitionDrawer && transitionDrawer.contains(activeEl));
       if (tablesHaveFocus) return;
       undoLastDelete();

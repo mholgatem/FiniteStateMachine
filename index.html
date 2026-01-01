@@ -126,56 +126,12 @@
         </div>
       </div>
       <button id="quickRef" class="ghost">Quick Reference</button>
+      <button id="stateDefinitionBtn" class="ghost">State Definition Table</button>
       <button id="toggleTransitionDrawer" class="ghost">State Transition Table</button>
       <button id="kmapToggle" class="ghost">K-maps</button>
       <button id="testKmapBtn" class="ghost">TEST KMAP</button>
     </div>
   </header>
-
-  <div class="table-panel-wrapper">
-    <div id="tablePanel" class="table-panel expanded">
-      <div class="table-controls">
-        <div class="form-row inline">
-          <label>Machine Name</label>
-          <input type="text" id="nameControl" />
-        </div>
-        <div class="form-row inline">
-          <label>Type</label>
-          <select id="typeControl">
-            <option value="moore">Moore</option>
-            <option value="mealy">Mealy</option>
-          </select>
-        </div>
-        <div class="form-row inline">
-          <label>States</label>
-          <select id="stateControl"></select>
-        </div>
-        <div class="form-row inline">
-          <label>Inputs</label>
-          <input type="text" id="inputsControl" />
-        </div>
-        <div class="form-row inline">
-          <label>Outputs</label>
-          <input type="text" id="outputsControl" />
-        </div>
-      </div>
-      <div class="table-wrapper">
-        <table id="stateTable">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Description</th>
-              <th>Label</th>
-              <th>State #</th>
-              <th class="moore-only">Outputs</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-    <button id="toggleTable" class="icon-btn table-toggle" title="Toggle definition table">▴</button>
-  </div>
 
   <main class="workspace">
     <aside class="state-palette">
@@ -247,6 +203,59 @@
       </ul>
       <div class="dialog-actions">
         <button data-close="quickRefDialog">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stateDefinitionDialog" class="dialog-backdrop hidden">
+    <div class="dialog state-definition-dialog">
+      <div class="dialog-header">
+        <h2>State Definition Table</h2>
+        <button class="ghost" data-close="stateDefinitionDialog" aria-label="Close state definition table">✕</button>
+      </div>
+      <div id="stateDefinitionContent" class="state-definition-body">
+        <div class="table-controls">
+          <div class="form-row inline">
+            <label>Machine Name</label>
+            <input type="text" id="nameControl" />
+          </div>
+          <div class="form-row inline">
+            <label>Type</label>
+            <select id="typeControl">
+              <option value="moore">Moore</option>
+              <option value="mealy">Mealy</option>
+            </select>
+          </div>
+          <div class="form-row inline">
+            <label>States</label>
+            <select id="stateControl"></select>
+          </div>
+          <div class="form-row inline">
+            <label>Inputs</label>
+            <input type="text" id="inputsControl" />
+          </div>
+          <div class="form-row inline">
+            <label>Outputs</label>
+            <input type="text" id="outputsControl" />
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table id="stateTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Description</th>
+                <th>Label</th>
+                <th>State #</th>
+                <th class="moore-only">Outputs</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dialog-actions end">
+        <button data-close="stateDefinitionDialog">Close</button>
       </div>
     </div>
   </div>
