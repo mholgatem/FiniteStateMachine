@@ -414,12 +414,25 @@ body {
   max-height: 320px;
 }
 
-.state-definition-dialog {
-  width: min(1100px, 95vw);
+
+.dialog.state-definition-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90vw;
+  max-width: calc(100vw - 24px);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+}
+
+.state-definition-dialog .dialog-header.state-definition-header {
+  cursor: move;
+  user-select: none;
 }
 
 .state-definition-dialog .dialog-header {
@@ -443,6 +456,23 @@ body {
 .state-definition-body .table-wrapper {
   flex: 1;
   max-height: none;
+}
+
+.state-definition-dialog .dialog-actions.end {
+  position: relative;
+  z-index: 1;
+}
+
+.state-definition-resize-handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  right: 6px;
+  bottom: 6px;
+  cursor: se-resize;
+  border-right: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  border-radius: 2px;
 }
 
 

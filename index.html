@@ -209,7 +209,7 @@
 
   <div id="stateDefinitionDialog" class="dialog-backdrop hidden">
     <div class="dialog state-definition-dialog">
-      <div class="dialog-header">
+      <div class="dialog-header state-definition-header" id="stateDefinitionHeader">
         <h2>State Definition Table</h2>
         <button class="ghost" data-close="stateDefinitionDialog" aria-label="Close state definition table">✕</button>
       </div>
@@ -244,9 +244,9 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>Description</th>
+                <th>State Binary</th>
                 <th>Label</th>
-                <th>State #</th>
+                <th>Description</th>
                 <th class="moore-only">Outputs</th>
               </tr>
             </thead>
@@ -257,6 +257,7 @@
       <div class="dialog-actions end">
         <button data-close="stateDefinitionDialog">Close</button>
       </div>
+      <div class="state-definition-resize-handle" id="stateDefinitionResizeHandle" aria-hidden="true"></div>
     </div>
   </div>
 

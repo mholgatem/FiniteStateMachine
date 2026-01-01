@@ -42,6 +42,9 @@ const stateTableBody = document.querySelector('#stateTable tbody');
 const toggleIoModeBtn = document.getElementById('toggleIoMode');
 const stateDefinitionDialog = document.getElementById('stateDefinitionDialog');
 const stateDefinitionContent = document.getElementById('stateDefinitionContent');
+const stateDefinitionWindow = stateDefinitionDialog?.querySelector('.state-definition-dialog');
+const stateDefinitionHeader = document.getElementById('stateDefinitionHeader');
+const stateDefinitionResizeHandle = document.getElementById('stateDefinitionResizeHandle');
 const toolbarTitle = document.getElementById('toolbarTitle');
 const mealyOutputRow = document.getElementById('mealyOutputRow');
 const inputChoices = document.getElementById('inputChoices');
@@ -86,6 +89,7 @@ if (kmapTypeInput) {
 }
 
 let kmapWindowState = { width: 840, height: 540, left: null, top: null };
+let stateDefinitionWindowState = { width: null, height: null, left: null, top: null };
 let kmapFormMemory = {
   functionToken: null,
   variableTokens: [],
@@ -163,10 +167,45 @@ function clearVerificationStatus() {
   }
 }
 
+function ensureStateDefinitionWindowState() {
+  if (!stateDefinitionWindow) return;
+  const margin = 12;
+  if (stateDefinitionWindowState.width === null) {
+    const defaultWidth = Math.min(window.innerWidth * 0.9, window.innerWidth - margin * 2);
+    stateDefinitionWindowState.width = defaultWidth;
+  }
+  if (stateDefinitionWindowState.height === null) {
+    const defaultHeight = Math.min(window.innerHeight * 0.8, window.innerHeight - margin * 2);
+    stateDefinitionWindowState.height = defaultHeight;
+  }
+  if (stateDefinitionWindowState.left === null || stateDefinitionWindowState.top === null) {
+    const left = Math.max(margin, (window.innerWidth - stateDefinitionWindowState.width) / 2);
+    const top = Math.max(margin, (window.innerHeight - stateDefinitionWindowState.height) / 2);
+    stateDefinitionWindowState.left = left;
+    stateDefinitionWindowState.top = top;
+  }
+}
+
+function applyStateDefinitionWindowLayout() {
+  if (!stateDefinitionWindow) return;
+  ensureStateDefinitionWindowState();
+  const margin = 12;
+  const maxLeft = window.innerWidth - stateDefinitionWindowState.width - margin;
+  const maxTop = window.innerHeight - stateDefinitionWindowState.height - margin;
+  stateDefinitionWindowState.left = Math.min(Math.max(margin, stateDefinitionWindowState.left), Math.max(margin, maxLeft));
+  stateDefinitionWindowState.top = Math.min(Math.max(margin, stateDefinitionWindowState.top), Math.max(margin, maxTop));
+  stateDefinitionWindow.style.width = `${stateDefinitionWindowState.width}px`;
+  stateDefinitionWindow.style.height = `${stateDefinitionWindowState.height}px`;
+  stateDefinitionWindow.style.left = `${stateDefinitionWindowState.left}px`;
+  stateDefinitionWindow.style.top = `${stateDefinitionWindowState.top}px`;
+  stateDefinitionWindow.style.transform = 'none';
+}
+
 function setDefinitionDialogOpen(open) {
   if (!stateDefinitionDialog) return;
   stateDefinitionDialog.classList.toggle('hidden', !open);
   if (open) {
+    applyStateDefinitionWindowLayout();
     const focusTarget = stateDefinitionDialog.querySelector('input, select, button');
     if (focusTarget) focusTarget.focus();
   }
@@ -480,9 +519,9 @@ function renderTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${st.id}</td>
-      <td><input data-field="description" data-id="${st.id}" value="${st.description}"></td>
-      <td><input data-field="label" data-id="${st.id}" value="${st.label}"></td>
       <td><input data-field="binary" data-id="${st.id}" value="${st.binary}"></td>
+      <td><input data-field="label" data-id="${st.id}" value="${st.label}"></td>
+      <td><input data-field="description" data-id="${st.id}" value="${st.description}"></td>
       <td class="moore-only ${state.type !== 'moore' ? 'hidden' : ''}"><input data-field="outputs" data-id="${st.id}" value="${st.outputs.join(',')}"></td>
     `;
     stateTableBody.appendChild(tr);
@@ -3257,6 +3296,7 @@ function captureDefinitionTableImage() {
   const target = stateDefinitionContent || stateDefinitionDialog;
   const wasHidden = stateDefinitionDialog.classList.contains('hidden');
   if (wasHidden) stateDefinitionDialog.classList.remove('hidden');
+  applyStateDefinitionWindowLayout();
 
   requestAnimationFrame(() => {
     captureImage(target, `${state.name}-state-definition-table.png`).finally(() => {
@@ -3667,6 +3707,57 @@ function attachEvents() {
   document.getElementById('stateDefinitionBtn').addEventListener('click', () => {
     setDefinitionDialogOpen(true);
   });
+  if (stateDefinitionHeader && stateDefinitionWindow) {
+    stateDefinitionHeader.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      applyStateDefinitionWindowLayout();
+      const rect = stateDefinitionWindow.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left;
+      const offsetY = e.clientY - rect.top;
+      const moveHandler = (ev) => {
+        const maxLeft = window.innerWidth - rect.width - 12;
+        const maxTop = window.innerHeight - rect.height - 12;
+        const newLeft = Math.min(Math.max(12, ev.clientX - offsetX), Math.max(12, maxLeft));
+        const newTop = Math.min(Math.max(12, ev.clientY - offsetY), Math.max(12, maxTop));
+        stateDefinitionWindowState.left = newLeft;
+        stateDefinitionWindowState.top = newTop;
+        stateDefinitionWindow.style.left = `${newLeft}px`;
+        stateDefinitionWindow.style.top = `${newTop}px`;
+        stateDefinitionWindow.style.transform = 'none';
+      };
+      const upHandler = () => {
+        document.removeEventListener('mousemove', moveHandler);
+        document.removeEventListener('mouseup', upHandler);
+      };
+      document.addEventListener('mousemove', moveHandler);
+      document.addEventListener('mouseup', upHandler);
+    });
+  }
+  if (stateDefinitionResizeHandle && stateDefinitionWindow) {
+    stateDefinitionResizeHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      applyStateDefinitionWindowLayout();
+      const rect = stateDefinitionWindow.getBoundingClientRect();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startWidth = rect.width;
+      const startHeight = rect.height;
+      const resizeHandler = (ev) => {
+        const newWidth = Math.max(520, Math.min(window.innerWidth - rect.left - 12, startWidth + (ev.clientX - startX)));
+        const newHeight = Math.max(320, Math.min(window.innerHeight - rect.top - 12, startHeight + (ev.clientY - startY)));
+        stateDefinitionWindowState.width = newWidth;
+        stateDefinitionWindowState.height = newHeight;
+        stateDefinitionWindow.style.width = `${newWidth}px`;
+        stateDefinitionWindow.style.height = `${newHeight}px`;
+      };
+      const stopResize = () => {
+        document.removeEventListener('mousemove', resizeHandler);
+        document.removeEventListener('mouseup', stopResize);
+      };
+      document.addEventListener('mousemove', resizeHandler);
+      document.addEventListener('mouseup', stopResize);
+    });
+  }
   if (transitionTableHelpBtn && transitionTableHelpDialog) {
     transitionTableHelpBtn.addEventListener('click', () => openDialog('transitionTableHelpDialog'));
   }
