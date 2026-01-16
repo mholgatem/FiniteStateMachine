@@ -281,6 +281,23 @@ function promptToSaveIfDirty(next) {
   if (proceed) next();
 }
 
+function promptToSaveBeforeLoad(next) {
+  if (!unsavedChanges) {
+    next();
+    return;
+  }
+  const shouldSave = window.confirm('You have unsaved changes. Save before loading a file?');
+  if (shouldSave) saveState();
+  next();
+}
+
+function prepareNewMachineDialog() {
+  const nameInput = document.getElementById('machineName');
+  if (nameInput) {
+    nameInput.value = '';
+  }
+}
+
 function normalizeNames(list) {
   return list
     .map((v) => v.trim())
@@ -3697,11 +3714,17 @@ function attachEvents() {
   });
 
   document.getElementById('newMachineBtn').addEventListener('click', () =>
-    promptToSaveIfDirty(() => openDialog('newMachineDialog'))
+    promptToSaveIfDirty(() => {
+      prepareNewMachineDialog();
+      openDialog('newMachineDialog');
+    })
   );
   toolbarNewMachine.addEventListener('click', () => {
     closeAllDropdowns();
-    promptToSaveIfDirty(() => openDialog('newMachineDialog'));
+    promptToSaveIfDirty(() => {
+      prepareNewMachineDialog();
+      openDialog('newMachineDialog');
+    });
   });
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
   document.getElementById('stateDefinitionBtn').addEventListener('click', () => {
@@ -3872,24 +3895,32 @@ function attachEvents() {
   document.getElementById('loadMachineInput').addEventListener('change', (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = JSON.parse(reader.result);
-      loadState(data);
-      landing.classList.add('hidden');
-    };
-    reader.readAsText(file);
+    const input = e.target;
+    promptToSaveBeforeLoad(() => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = JSON.parse(reader.result);
+        loadState(data);
+        landing.classList.add('hidden');
+      };
+      reader.readAsText(file);
+      input.value = '';
+    });
   });
 
   document.getElementById('loadButton').addEventListener('change', (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = JSON.parse(reader.result);
-      loadState(data);
-    };
-    reader.readAsText(file);
+    const input = e.target;
+    promptToSaveBeforeLoad(() => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = JSON.parse(reader.result);
+        loadState(data);
+      };
+      reader.readAsText(file);
+      input.value = '';
+    });
     closeAllDropdowns();
   });
 
@@ -4080,8 +4111,14 @@ function attachEvents() {
     const field = target.dataset.field;
     const st = state.states.find((s) => s.id === id);
     if (!st) return;
+    if (field === 'binary') {
+      const cleaned = (target.value || '').replace(/[^01]/g, '');
+      if (target.value !== cleaned) target.value = cleaned;
+    }
     if (field === 'outputs') {
-      st.outputs = parseList(target.value);
+      const cleaned = (target.value || '').toUpperCase().replace(/[^01X,;]/g, '');
+      if (target.value !== cleaned) target.value = cleaned;
+      st.outputs = parseList(cleaned.replace(/;/g, ','));
     } else {
       st[field] = target.value;
     }
