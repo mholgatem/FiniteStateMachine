@@ -281,6 +281,26 @@ function promptToSaveIfDirty(next) {
   if (proceed) next();
 }
 
+async function promptToSaveBeforeLoad(next) {
+  if (!unsavedChanges) {
+    await next();
+    return;
+  }
+  const shouldSave = window.confirm('You have unsaved changes. Save before loading a file?');
+  if (shouldSave) {
+    const saved = await saveStateAs();
+    if (!saved) return;
+  }
+  await next();
+}
+
+function prepareNewMachineDialog() {
+  const nameInput = document.getElementById('machineName');
+  if (nameInput) {
+    nameInput.value = '';
+  }
+}
+
 function normalizeNames(list) {
   return list
     .map((v) => v.trim())
@@ -1568,6 +1588,39 @@ function saveState() {
   download(`${state.name || 'fsm'}-save.json`, url);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   clearDirty();
+}
+
+async function saveStateAs() {
+  ensureTransitionTableStructure();
+  const payloadState = JSON.parse(JSON.stringify(state));
+  payloadState.transitionTable = compressTransitionTable(state.transitionTable);
+  const payload = stringifyStateWithInlineArrays(payloadState);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const suggestedName = `${sanitizeFilename(state.name || 'fsm')}-save.json`;
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [
+          {
+            description: 'JSON files',
+            accept: { 'application/json': ['.json'] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      clearDirty();
+      return true;
+    } catch (error) {
+      if (error && error.name === 'AbortError') return false;
+    }
+  }
+
+  saveState();
+  return true;
 }
 
 function loadState(data) {
@@ -3697,11 +3750,17 @@ function attachEvents() {
   });
 
   document.getElementById('newMachineBtn').addEventListener('click', () =>
-    promptToSaveIfDirty(() => openDialog('newMachineDialog'))
+    promptToSaveIfDirty(() => {
+      prepareNewMachineDialog();
+      openDialog('newMachineDialog');
+    })
   );
   toolbarNewMachine.addEventListener('click', () => {
     closeAllDropdowns();
-    promptToSaveIfDirty(() => openDialog('newMachineDialog'));
+    promptToSaveIfDirty(() => {
+      prepareNewMachineDialog();
+      openDialog('newMachineDialog');
+    });
   });
   document.getElementById('quickRef').addEventListener('click', () => openDialog('quickRefDialog'));
   document.getElementById('stateDefinitionBtn').addEventListener('click', () => {
@@ -3869,27 +3928,35 @@ function attachEvents() {
     clearDirty();
   });
 
-  document.getElementById('loadMachineInput').addEventListener('change', (e) => {
+  document.getElementById('loadMachineInput').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = JSON.parse(reader.result);
-      loadState(data);
-      landing.classList.add('hidden');
-    };
-    reader.readAsText(file);
+    const input = e.target;
+    await promptToSaveBeforeLoad(async () => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = JSON.parse(reader.result);
+        loadState(data);
+        landing.classList.add('hidden');
+      };
+      reader.readAsText(file);
+    });
+    input.value = '';
   });
 
-  document.getElementById('loadButton').addEventListener('change', (e) => {
+  document.getElementById('loadButton').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = JSON.parse(reader.result);
-      loadState(data);
-    };
-    reader.readAsText(file);
+    const input = e.target;
+    await promptToSaveBeforeLoad(async () => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = JSON.parse(reader.result);
+        loadState(data);
+      };
+      reader.readAsText(file);
+    });
+    input.value = '';
     closeAllDropdowns();
   });
 
@@ -4080,8 +4147,14 @@ function attachEvents() {
     const field = target.dataset.field;
     const st = state.states.find((s) => s.id === id);
     if (!st) return;
+    if (field === 'binary') {
+      const cleaned = (target.value || '').replace(/[^01]/g, '');
+      if (target.value !== cleaned) target.value = cleaned;
+    }
     if (field === 'outputs') {
-      st.outputs = parseList(target.value);
+      const cleaned = (target.value || '').toUpperCase().replace(/[^01X,;]/g, '');
+      if (target.value !== cleaned) target.value = cleaned;
+      st.outputs = parseList(cleaned.replace(/;/g, ','));
     } else {
       st[field] = target.value;
     }
