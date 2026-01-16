@@ -1598,30 +1598,29 @@ async function saveStateAs() {
   const blob = new Blob([payload], { type: 'application/json' });
   const suggestedName = `${sanitizeFilename(state.name || 'fsm')}-save.json`;
 
-  if (!window.showSaveFilePicker) {
-    saveState();
-    return true;
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [
+          {
+            description: 'JSON files',
+            accept: { 'application/json': ['.json'] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      clearDirty();
+      return true;
+    } catch (error) {
+      if (error && error.name === 'AbortError') return false;
+    }
   }
 
-  try {
-    const handle = await window.showSaveFilePicker({
-      suggestedName,
-      types: [
-        {
-          description: 'JSON files',
-          accept: { 'application/json': ['.json'] },
-        },
-      ],
-    });
-    const writable = await handle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    clearDirty();
-    return true;
-  } catch (error) {
-    if (error && error.name === 'AbortError') return false;
-    throw error;
-  }
+  saveState();
+  return true;
 }
 
 function loadState(data) {
