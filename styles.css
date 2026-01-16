@@ -107,6 +107,11 @@ body {
   display: none;
 }
 
+#fileMenu,
+#settingsMenu {
+  z-index: 19;
+}
+
 .nested-dropdown {
   width: 100%;
 }
@@ -692,7 +697,7 @@ svg text {
 }
 
 .state-node.selected {
-  stroke: #00d7ff;
+  stroke: #ff0000;
   stroke-width: 3px;
 }
 
@@ -1021,7 +1026,7 @@ svg text {
 }
 
 .kmap-expr-token.selected {
-  border: 1px solid #0f9d9f;
+  border: 2px solid #ff0000;
 }
 
 .kmap-expr-token.operator {
