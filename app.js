@@ -538,12 +538,13 @@ function renderTable() {
   stateTableBody.innerHTML = '';
   state.states.forEach((st, index) => {
     const tr = document.createElement('tr');
-    tr.draggable = true;
     tr.dataset.id = st.id;
     tr.innerHTML = `
-      <td class="row-drag-handle" title="Drag to reorder row" aria-label="Drag row ${index + 1} to reorder">
-        <span class="drag-handle-icon" aria-hidden="true">⋮⋮</span>
-        <span class="row-number">${index + 1}</span>
+      <td class="row-drag-handle" title="Drag to reorder row" aria-label="Drag row ${index} to reorder" draggable="true">
+        <div class="row-drag-handle-content">
+          <span class="drag-handle-icon" aria-hidden="true">⋮⋮</span>
+          <span class="row-number">${index}</span>
+        </div>
       </td>
       <td><input data-field="binary" data-id="${st.id}" value="${st.binary}"></td>
       <td><input data-field="label" data-id="${st.id}" value="${st.label}"></td>

@@ -493,13 +493,16 @@ body {
 td.row-drag-handle {
   cursor: grab;
   user-select: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
 }
 
 td.row-drag-handle:active {
   cursor: grabbing;
+}
+
+.row-drag-handle-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .drag-handle-icon {
