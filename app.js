@@ -281,14 +281,17 @@ function promptToSaveIfDirty(next) {
   if (proceed) next();
 }
 
-function promptToSaveBeforeLoad(next) {
+async function promptToSaveBeforeLoad(next) {
   if (!unsavedChanges) {
-    next();
+    await next();
     return;
   }
   const shouldSave = window.confirm('You have unsaved changes. Save before loading a file?');
-  if (shouldSave) saveState();
-  next();
+  if (shouldSave) {
+    const saved = await saveStateAs();
+    if (!saved) return;
+  }
+  await next();
 }
 
 function prepareNewMachineDialog() {
@@ -1585,6 +1588,40 @@ function saveState() {
   download(`${state.name || 'fsm'}-save.json`, url);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   clearDirty();
+}
+
+async function saveStateAs() {
+  ensureTransitionTableStructure();
+  const payloadState = JSON.parse(JSON.stringify(state));
+  payloadState.transitionTable = compressTransitionTable(state.transitionTable);
+  const payload = stringifyStateWithInlineArrays(payloadState);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const suggestedName = `${sanitizeFilename(state.name || 'fsm')}-save.json`;
+
+  if (!window.showSaveFilePicker) {
+    saveState();
+    return true;
+  }
+
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName,
+      types: [
+        {
+          description: 'JSON files',
+          accept: { 'application/json': ['.json'] },
+        },
+      ],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    clearDirty();
+    return true;
+  } catch (error) {
+    if (error && error.name === 'AbortError') return false;
+    throw error;
+  }
 }
 
 function loadState(data) {
@@ -3892,11 +3929,11 @@ function attachEvents() {
     clearDirty();
   });
 
-  document.getElementById('loadMachineInput').addEventListener('change', (e) => {
+  document.getElementById('loadMachineInput').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const input = e.target;
-    promptToSaveBeforeLoad(() => {
+    await promptToSaveBeforeLoad(async () => {
       const reader = new FileReader();
       reader.onload = () => {
         const data = JSON.parse(reader.result);
@@ -3904,23 +3941,23 @@ function attachEvents() {
         landing.classList.add('hidden');
       };
       reader.readAsText(file);
-      input.value = '';
     });
+    input.value = '';
   });
 
-  document.getElementById('loadButton').addEventListener('change', (e) => {
+  document.getElementById('loadButton').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const input = e.target;
-    promptToSaveBeforeLoad(() => {
+    await promptToSaveBeforeLoad(async () => {
       const reader = new FileReader();
       reader.onload = () => {
         const data = JSON.parse(reader.result);
         loadState(data);
       };
       reader.readAsText(file);
-      input.value = '';
     });
+    input.value = '';
     closeAllDropdowns();
   });
 
