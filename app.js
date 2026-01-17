@@ -1436,7 +1436,7 @@ function buildChoiceRow(container, name, index, currentValue, prefix) {
   const row = document.createElement('div');
   row.className = 'io-row';
   const label = document.createElement('label');
-  label.textContent = name || `Var ${index + 1}`;
+  label.innerHTML = formatScriptedText(name || `Var ${index + 1}`);
   row.appendChild(label);
 
   const options = document.createElement('div');
