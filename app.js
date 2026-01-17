@@ -29,6 +29,7 @@ let transitionTableGroupSize = 0;
 let verifyButtonResetTimer = null;
 let dialogBackdropMouseDownTarget = null;
 let dialogBackdropCloseBlocked = false;
+let stateTableDragId = null;
 
 const landing = document.getElementById('landing');
 const newMachineDialog = document.getElementById('newMachineDialog');
@@ -175,7 +176,7 @@ function ensureStateDefinitionWindowState() {
     stateDefinitionWindowState.width = defaultWidth;
   }
   if (stateDefinitionWindowState.height === null) {
-    const defaultHeight = Math.min(window.innerHeight * 0.8, window.innerHeight - margin * 2);
+    const defaultHeight = Math.min(window.innerHeight * 0.95, window.innerHeight - margin * 2);
     stateDefinitionWindowState.height = defaultHeight;
   }
   if (stateDefinitionWindowState.left === null || stateDefinitionWindowState.top === null) {
@@ -535,10 +536,16 @@ function renderPalette() {
 
 function renderTable() {
   stateTableBody.innerHTML = '';
-  state.states.forEach((st) => {
+  state.states.forEach((st, index) => {
     const tr = document.createElement('tr');
+    tr.dataset.id = st.id;
     tr.innerHTML = `
-      <td>${st.id}</td>
+      <td class="row-drag-handle" title="Drag to reorder row" aria-label="Drag row ${index} to reorder" draggable="true">
+        <div class="row-drag-handle-content">
+          <span class="drag-handle-icon" aria-hidden="true">⋮⋮</span>
+          <span class="row-number">${index}</span>
+        </div>
+      </td>
       <td><input data-field="binary" data-id="${st.id}" value="${st.binary}"></td>
       <td><input data-field="label" data-id="${st.id}" value="${st.label}"></td>
       <td><input data-field="description" data-id="${st.id}" value="${st.description}"></td>
@@ -4161,6 +4168,63 @@ function attachEvents() {
     renderPalette();
     renderDiagram();
     markDirty();
+  });
+
+  stateTableBody.addEventListener('dragstart', (e) => {
+    const handle = e.target.closest('.row-drag-handle');
+    if (!handle) {
+      e.preventDefault();
+      return;
+    }
+    const row = handle.closest('tr');
+    if (!row) return;
+    stateTableDragId = row.dataset.id;
+    row.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', stateTableDragId);
+    }
+  });
+
+  stateTableBody.addEventListener('dragover', (e) => {
+    if (!stateTableDragId) return;
+    const row = e.target.closest('tr');
+    if (!row) return;
+    e.preventDefault();
+    row.classList.add('drag-over');
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+  });
+
+  stateTableBody.addEventListener('dragleave', (e) => {
+    const row = e.target.closest('tr');
+    if (!row) return;
+    row.classList.remove('drag-over');
+  });
+
+  stateTableBody.addEventListener('drop', (e) => {
+    if (!stateTableDragId) return;
+    const row = e.target.closest('tr');
+    if (!row) return;
+    e.preventDefault();
+    const dropId = row.dataset.id;
+    if (!dropId || dropId === stateTableDragId) return;
+    const fromIndex = state.states.findIndex((s) => s.id === parseInt(stateTableDragId, 10));
+    const toIndex = state.states.findIndex((s) => s.id === parseInt(dropId, 10));
+    if (fromIndex === -1 || toIndex === -1) return;
+    const [moved] = state.states.splice(fromIndex, 1);
+    state.states.splice(toIndex, 0, moved);
+    stateTableDragId = null;
+    renderTable();
+    markDirty();
+  });
+
+  stateTableBody.addEventListener('dragend', () => {
+    stateTableDragId = null;
+    stateTableBody.querySelectorAll('tr').forEach((row) => {
+      row.classList.remove('drag-over', 'dragging');
+    });
   });
 
   transitionTableBody.addEventListener('input', (e) => {

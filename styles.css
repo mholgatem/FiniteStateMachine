@@ -107,6 +107,11 @@ body {
   display: none;
 }
 
+#fileMenu,
+#settingsMenu {
+  z-index: 19;
+}
+
 .nested-dropdown {
   width: 100%;
 }
@@ -404,7 +409,7 @@ body {
 .table-controls {
   display: flex;
   gap: 0.75rem;
-  padding: 0.75rem 1rem 0.25rem;
+  padding: 0 1rem 0.25rem;
   flex-wrap: wrap;
 }
 
@@ -422,19 +427,20 @@ body {
   transform: translate(-50%, -50%);
   width: 90vw;
   max-width: calc(100vw - 24px);
-  max-height: 90vh;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border);
   padding: 0;
-  padding-bottom: 30px;
+  padding-bottom: 10px;
 }
 
 .state-definition-dialog .dialog-header.state-definition-header {
   cursor: move;
   user-select: none;
+  padding: 0 1rem;
 }
 
 .state-definition-dialog .dialog-header {
@@ -487,6 +493,35 @@ body {
 .table-wrapper table {
   width: 100%;
   border-collapse: collapse;
+}
+
+td.row-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+td.row-drag-handle:active {
+  cursor: grabbing;
+}
+
+.row-drag-handle-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.drag-handle-icon {
+  font-size: 0.85rem;
+  opacity: 0.6;
+}
+
+tbody tr.drag-over {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+}
+
+tbody tr.dragging {
+  opacity: 0.6;
 }
 
 th, td {
@@ -594,7 +629,7 @@ button:active {
 .dialog-actions {
   display: flex;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: 0;
   flex-wrap: wrap;
 }
 
@@ -662,7 +697,7 @@ svg text {
 }
 
 .state-node.selected {
-  stroke: #00d7ff;
+  stroke: #ff0000;
   stroke-width: 3px;
 }
 
@@ -991,7 +1026,7 @@ svg text {
 }
 
 .kmap-expr-token.selected {
-  border: 1px solid #0f9d9f;
+  border: 2px solid #ff0000;
 }
 
 .kmap-expr-token.operator {
