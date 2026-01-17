@@ -669,6 +669,7 @@ button:active {
   display: grid;
   place-items: center;
   font-weight: 700;
+  font-size: 0.85rem;
 }
 
 .state-meta {
@@ -710,6 +711,12 @@ svg text {
 }
 
 .state-label-text {
+  font-weight: 700;
+}
+
+.state-decimal-text {
+  fill: var(--text);
+  opacity: 0.15;
   font-weight: 700;
 }
 

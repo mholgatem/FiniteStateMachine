@@ -524,7 +524,8 @@ function renderPalette() {
   unplaced.forEach((st) => {
     const node = template.content.firstElementChild.cloneNode(true);
     node.dataset.id = st.id;
-    node.querySelector('.state-circle').textContent = st.id;
+    const decimalValue = stateBinaryDecimal(st);
+    node.querySelector('.state-circle').textContent = decimalValue ?? st.id;
     node.querySelector('.state-label').textContent = st.label;
     node.querySelector('.state-extra').innerHTML =
       state.type === 'moore'
@@ -864,6 +865,16 @@ function drawState(st) {
     circle.classList.add('missing');
   }
 
+  const decimalValue = stateBinaryDecimal(st);
+  const decimalText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  decimalText.setAttribute('x', st.x);
+  decimalText.setAttribute('y', st.y + 2);
+  decimalText.setAttribute('text-anchor', 'middle');
+  decimalText.setAttribute('dominant-baseline', 'middle');
+  decimalText.setAttribute('font-size', st.radius * 1.7);
+  decimalText.classList.add('state-decimal-text');
+  decimalText.textContent = decimalValue ?? '';
+
   const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   textLabel.setAttribute('x', st.x);
   textLabel.setAttribute('y', st.y - 6);
@@ -882,6 +893,7 @@ function drawState(st) {
   }
 
   group.appendChild(circle);
+  group.appendChild(decimalText);
   group.appendChild(textLabel);
   group.appendChild(textId);
   viewport.appendChild(group);
@@ -944,6 +956,16 @@ function stateBinaryCode(stateId, bitCount) {
   if (!st) return null;
   const cleaned = (st.binary || stateId.toString(2)).replace(/[^01]/g, '');
   return cleaned.padStart(bitCount, '0').slice(-bitCount);
+}
+
+function stateBinaryDecimal(st) {
+  if (!st) return null;
+  const bitCount = stateBitCount();
+  const cleaned = (st.binary || st.id.toString(2)).replace(/[^01]/g, '');
+  if (!cleaned) return null;
+  const padded = cleaned.padStart(bitCount, '0').slice(-bitCount);
+  const parsed = parseInt(padded, 2);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 function expectedOutputsForTransition(tr) {
