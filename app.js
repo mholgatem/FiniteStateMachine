@@ -868,7 +868,7 @@ function drawState(st) {
   const decimalValue = stateBinaryDecimal(st);
   const decimalText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   decimalText.setAttribute('x', st.x);
-  decimalText.setAttribute('y', st.y + 2);
+  decimalText.setAttribute('y', st.y + st.radius * 0.07);
   decimalText.setAttribute('text-anchor', 'middle');
   decimalText.setAttribute('dominant-baseline', 'middle');
   decimalText.setAttribute('font-size', st.radius * 1.7);
