@@ -2997,7 +2997,7 @@ function renderKmapDialogDropzones() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'kmap-expr-placeholder';
-      placeholder.textContent = 'Drag tokens here to set the variable order (min 2, max 6)';
+      placeholder.textContent = 'Drag tokens here to set the table variables (min 2, max 6)';
       kmapVariablesDropzone.appendChild(placeholder);
     }
   }
