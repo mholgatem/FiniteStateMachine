@@ -2974,7 +2974,7 @@ function renderKmapDialogDropzones() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'kmap-expr-placeholder';
-      placeholder.textContent = 'Drag a column here to set the function identifier';
+      placeholder.textContent = 'Drag a token here to set the value that you want to solve for';
       kmapLabelDropzone.appendChild(placeholder);
     }
   }
@@ -2997,7 +2997,7 @@ function renderKmapDialogDropzones() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'kmap-expr-placeholder';
-      placeholder.textContent = 'Drag columns here to set the variable order (min 2, max 6)';
+      placeholder.textContent = 'Drag tokens here to set the variable order (min 2, max 6)';
       kmapVariablesDropzone.appendChild(placeholder);
     }
   }
