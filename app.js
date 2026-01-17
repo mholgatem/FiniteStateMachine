@@ -486,6 +486,7 @@ function initStates() {
     binary: i.toString(2).padStart(Math.ceil(Math.log2(state.numStates)), '0'),
     outputs: state.outputs.map(() => '0'),
     placed: false,
+    hasBeenPlaced: false,
     x: 120 + i * 25,
     y: 120 + i * 20,
     radius: 38,
@@ -1675,6 +1676,12 @@ function loadState(data) {
     outputs: targetOutputs,
     transitionTable: decompressedTransitionTable,
   });
+  if (Array.isArray(state.states)) {
+    state.states = state.states.map((st) => ({
+      ...st,
+      hasBeenPlaced: st.hasBeenPlaced ?? !!st.placed,
+    }));
+  }
   state.numStates = targetNumStates;
   state.inputs = targetInputs;
   state.outputs = targetOutputs;
@@ -4644,6 +4651,10 @@ function attachEvents() {
     st.x = pt.x;
     st.y = pt.y;
     st.placed = true;
+    if (!wasPlaced && !st.hasBeenPlaced) {
+      st.radius *= 1.5;
+      st.hasBeenPlaced = true;
+    }
     renderPalette();
     renderDiagram();
     if (!wasPlaced) {
