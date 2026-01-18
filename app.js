@@ -39,6 +39,7 @@ const diagram = document.getElementById('diagram');
 const viewport = document.getElementById('viewport');
 const paletteList = document.getElementById('paletteList');
 const palettePane = document.querySelector('.state-palette');
+const workspace = document.querySelector('.workspace');
 const stateTableBody = document.querySelector('#stateTable tbody');
 const toggleIoModeBtn = document.getElementById('toggleIoMode');
 const stateDefinitionDialog = document.getElementById('stateDefinitionDialog');
@@ -521,7 +522,16 @@ function updateControls() {
 function renderPalette() {
   paletteList.innerHTML = '';
   const template = document.getElementById('paletteItemTemplate');
-  const unplaced = state.states.filter((s) => !s.placed).sort((a, b) => a.id - b.id);
+  const unplaced = state.states
+    .filter((s) => !s.placed)
+    .sort((a, b) => {
+      const aDecimal = stateBinaryDecimal(a);
+      const bDecimal = stateBinaryDecimal(b);
+      const aOrder = aDecimal ?? a.id;
+      const bOrder = bDecimal ?? b.id;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.id - b.id;
+    });
   unplaced.forEach((st) => {
     const node = template.content.firstElementChild.cloneNode(true);
     node.dataset.id = st.id;
@@ -3399,11 +3409,15 @@ function openTransitionDrawer() {
   transitionDrawer.classList.add('open');
   document.body.classList.add('drawer-open');
   document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
+  palettePane?.classList.add('collapsed');
+  workspace?.classList.add('palette-collapsed');
 }
 
 function closeTransitionDrawer() {
   transitionDrawer.classList.remove('open');
   document.body.classList.remove('drawer-open');
+  palettePane?.classList.remove('collapsed');
+  workspace?.classList.remove('palette-collapsed');
 }
 
 function updateDrawerWidth(width) {
