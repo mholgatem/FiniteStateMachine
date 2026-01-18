@@ -107,6 +107,7 @@ let showKmapCircles = false;
 let showKmapCirclesBeforeResize = false;
 const allowedStateCounts = [1, 2, 4, 8, 16, 32];
 const kmapCirclePalette = ['#2563eb', '#d946ef', '#22c55e', '#f97316', '#14b8a6', '#f59e0b'];
+const kmapCircleFadeDuration = 1500;
 
 function coerceAllowedStateCount(value) {
   const num = parseInt(value, 10);
@@ -1958,10 +1959,19 @@ function clearDropMarker(tray) {
 }
 
 function updateKmapExpressionTokens(kmap, tokens, tray) {
+  const previousTokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+  const previousSignatures = kmap.circleSectionSignatures || getKmapSectionSignatures(previousTokens);
+  const nextSignatures = getKmapSectionSignatures(tokens);
+  const changedSections = diffKmapSectionSignatures(previousSignatures, nextSignatures);
   kmap.expressionTokens = tokens;
   kmap.expression = tokensToCanonical(tokens) || '';
   if (tray) renderExpressionTray(tray, tokens, kmap.id);
-  scheduleKmapCircleRender();
+  if (showKmapCircles && changedSections.length) {
+    renderKmapCircleSectionUpdate(kmap, changedSections, tokens);
+  } else {
+    scheduleKmapCircleRender();
+  }
+  kmap.circleSectionSignatures = nextSignatures;
 }
 
 function getKmapById(id) {
@@ -2615,6 +2625,102 @@ function splitExpressionSections(tokens = []) {
   return sections;
 }
 
+function getKmapSectionSignatures(tokens = []) {
+  return splitExpressionSections(tokens).map((sectionTokens) => tokensToCanonical(sectionTokens));
+}
+
+function buildKmapCircleGroup({
+  sectionTokens,
+  sectionIdx,
+  layout,
+  variables,
+  cells,
+  overlayRect,
+  paletteOffset,
+}) {
+  const canonical = tokensToCanonical(sectionTokens);
+  const sectionTable = buildExpressionTruthTable(canonical, variables);
+  if (!sectionTable) return null;
+  const computePadding = 5;
+  const drawPadding = -4;
+  const activeCells = cells
+    .map((cell) => {
+      if (sectionTable.get(cell.key) !== '1') return null;
+      const target = cell.element.closest('td') || cell.element.parentElement;
+      const rect = target.getBoundingClientRect();
+      return {
+        rect: {
+          minX: rect.left - overlayRect.left - computePadding,
+          minY: rect.top - overlayRect.top - computePadding,
+          maxX: rect.right - overlayRect.left + computePadding,
+          maxY: rect.bottom - overlayRect.top + computePadding,
+        },
+        cell,
+      };
+    })
+    .filter(Boolean);
+
+  if (!activeCells.length) return null;
+
+  const clusters = clusterCellsWithWrap(activeCells, layout, 32);
+  const strokeColor = kmapCirclePalette[(paletteOffset + sectionIdx) % kmapCirclePalette.length];
+  const fillColor = colorWithAlpha(strokeColor, 0.12);
+  const paddingAdjustment = computePadding - drawPadding;
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  group.setAttribute('class', 'kmap-circle-section');
+  group.dataset.sectionIndex = sectionIdx;
+
+  clusters.forEach((cl) => {
+    const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const minX = cl.minX + paddingAdjustment;
+    const minY = cl.minY + paddingAdjustment;
+    const maxX = cl.maxX - paddingAdjustment;
+    const maxY = cl.maxY - paddingAdjustment;
+
+    rectEl.setAttribute('x', minX);
+    rectEl.setAttribute('y', minY);
+    rectEl.setAttribute('width', maxX - minX);
+    rectEl.setAttribute('height', maxY - minY);
+    rectEl.setAttribute('rx', 14);
+    rectEl.setAttribute('ry', 14);
+    rectEl.setAttribute('fill', fillColor);
+    rectEl.setAttribute('stroke', strokeColor);
+    rectEl.setAttribute('stroke-width', '2');
+    rectEl.setAttribute('class', 'kmap-circle-rect');
+    group.appendChild(rectEl);
+  });
+
+  const sorted = [...clusters].sort((a, b) => (a.minX === b.minX ? a.minY - b.minY : a.minX - b.minX));
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    const start = sorted[i];
+    const end = sorted[i + 1];
+    const dx = end.cx - start.cx;
+    const dy = end.cy - start.cy;
+    const dist = Math.hypot(dx, dy) || 1;
+    const offset = Math.min(40, dist / 3);
+    const cx = (start.cx + end.cx) / 2 - (dy / dist) * offset;
+    const cy = (start.cy + end.cy) / 2 + (dx / dist) * offset;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${start.cx} ${start.cy} Q ${cx} ${cy} ${end.cx} ${end.cy}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', strokeColor);
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-dasharray', '8 6');
+    path.setAttribute('class', 'kmap-circle-link');
+    group.appendChild(path);
+  }
+
+  return group;
+}
+
+function clearKmapCircleAnimations(kmap) {
+  if (!kmap?.circleSectionAnimations) return;
+  Object.values(kmap.circleSectionAnimations).forEach((entry) => {
+    if (entry?.timeoutId) window.clearTimeout(entry.timeoutId);
+  });
+  kmap.circleSectionAnimations = {};
+}
+
 function renderKmapCircles(root = null) {
   const context = root || document;
 
@@ -2640,6 +2746,7 @@ function renderKmapCircles(root = null) {
     const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
     const sections = splitExpressionSections(tokens);
     if (!sections.length) return;
+    clearKmapCircleAnimations(kmap);
     const cells = collectKmapCells(kmap, card, layout);
     const overlay = card.querySelector('.kmap-circle-overlay');
     if (!overlay) return;
@@ -2652,77 +2759,91 @@ function renderKmapCircles(root = null) {
     const paletteOffset = state.kmaps.findIndex((m) => m.id === kmap.id) % kmapCirclePalette.length;
 
     sections.forEach((sectionTokens, sectionIdx) => {
-      const canonical = tokensToCanonical(sectionTokens);
-      const sectionTable = buildExpressionTruthTable(canonical, variables);
-      if (!sectionTable) return;
-      const computePadding = 5;
-      const drawPadding = -4;
-      const activeCells = cells
-        .map((cell) => {
-          if (sectionTable.get(cell.key) !== '1') return null;
-          // Use the parent cell (td) dimensions so adjacent cells physically touch.
-          // This ensures the gap is 0px, guaranteeing a merge.
-          const target = cell.element.closest('td') || cell.element.parentElement;
-          const rect = target.getBoundingClientRect();
-          return {
-            rect: {
-              minX: rect.left - overlayRect.left - computePadding,
-              minY: rect.top - overlayRect.top - computePadding,
-              maxX: rect.right - overlayRect.left + computePadding,
-              maxY: rect.bottom - overlayRect.top + computePadding,
-            },
-            cell,
-          };
-        })
-        .filter(Boolean);
-
-      if (!activeCells.length) return;
-
-      const clusters = clusterCellsWithWrap(activeCells, layout, 32);
-      const strokeColor = kmapCirclePalette[(paletteOffset + sectionIdx) % kmapCirclePalette.length];
-      const fillColor = colorWithAlpha(strokeColor, 0.12);
-      const paddingAdjustment = computePadding - drawPadding;
-
-      clusters.forEach((cl) => {
-        const rectEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        const minX = cl.minX + paddingAdjustment;
-        const minY = cl.minY + paddingAdjustment;
-        const maxX = cl.maxX - paddingAdjustment;
-        const maxY = cl.maxY - paddingAdjustment;
-
-        rectEl.setAttribute('x', minX);
-        rectEl.setAttribute('y', minY);
-        rectEl.setAttribute('width', maxX - minX);
-        rectEl.setAttribute('height', maxY - minY);
-        rectEl.setAttribute('rx', 14);
-        rectEl.setAttribute('ry', 14);
-        rectEl.setAttribute('fill', fillColor);
-        rectEl.setAttribute('stroke', strokeColor);
-        rectEl.setAttribute('stroke-width', '2');
-        rectEl.setAttribute('class', 'kmap-circle-rect');
-        svg.appendChild(rectEl);
+      const group = buildKmapCircleGroup({
+        sectionTokens,
+        sectionIdx,
+        layout,
+        variables,
+        cells,
+        overlayRect,
+        paletteOffset,
       });
-
-      const sorted = [...clusters].sort((a, b) => (a.minX === b.minX ? a.minY - b.minY : a.minX - b.minX));
-      for (let i = 0; i < sorted.length - 1; i += 1) {
-        const start = sorted[i];
-        const end = sorted[i + 1];
-        const dx = end.cx - start.cx;
-        const dy = end.cy - start.cy;
-        const dist = Math.hypot(dx, dy) || 1;
-        const offset = Math.min(40, dist / 3);
-        const cx = (start.cx + end.cx) / 2 - (dy / dist) * offset;
-        const cy = (start.cy + end.cy) / 2 + (dx / dist) * offset;
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', `M ${start.cx} ${start.cy} Q ${cx} ${cy} ${end.cx} ${end.cy}`);
-        path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', strokeColor);
-        path.setAttribute('stroke-width', '2');
-        path.setAttribute('stroke-dasharray', '8 6');
-        path.setAttribute('class', 'kmap-circle-link');
-        svg.appendChild(path);
-      }
+      if (!group) return;
+      svg.appendChild(group);
     });
+
+    kmap.circleSectionSignatures = getKmapSectionSignatures(tokens);
+  });
+}
+
+function diffKmapSectionSignatures(previous = [], next = []) {
+  const max = Math.max(previous.length, next.length);
+  const changed = [];
+  for (let i = 0; i < max; i += 1) {
+    if (previous[i] !== next[i]) changed.push(i);
+  }
+  return changed;
+}
+
+function renderKmapCircleSectionUpdate(kmap, sectionIndices, tokens) {
+  if (!showKmapCircles || !sectionIndices.length) return;
+  const card = kmapList?.querySelector(`.kmap-card[data-kmap-id="${kmap.id}"]`);
+  if (!card) return;
+  const overlay = card.querySelector('.kmap-circle-overlay');
+  if (!overlay) return;
+  let svg = overlay.querySelector('svg');
+  if (!svg) {
+    renderKmapCircles(card);
+    svg = overlay.querySelector('svg');
+  }
+  if (!svg) return;
+
+  const layout = buildKmapLayout(kmap);
+  const variables = kmapVariablesForLayout(layout);
+  const cells = collectKmapCells(kmap, card, layout);
+  const overlayRect = overlay.getBoundingClientRect();
+  const paletteOffset = state.kmaps.findIndex((m) => m.id === kmap.id) % kmapCirclePalette.length;
+  const sectionAnimations = kmap.circleSectionAnimations || {};
+  const nextSignatures = getKmapSectionSignatures(tokens);
+  kmap.circleSectionAnimations = sectionAnimations;
+
+  sectionIndices.forEach((sectionIdx) => {
+    const signature = nextSignatures[sectionIdx] ?? null;
+    const existingAnimation = sectionAnimations[sectionIdx];
+    if (existingAnimation?.timeoutId) {
+      window.clearTimeout(existingAnimation.timeoutId);
+    }
+    const existingGroup = svg.querySelector(`[data-section-index="${sectionIdx}"]`);
+    if (existingGroup) {
+      existingGroup.classList.add('kmap-circle-fade-out');
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if ((kmap.circleSectionSignatures?.[sectionIdx] ?? null) !== signature) return;
+      const staleGroup = svg.querySelector(`[data-section-index="${sectionIdx}"]`);
+      if (staleGroup && staleGroup.parentNode) {
+        staleGroup.parentNode.removeChild(staleGroup);
+      }
+      const currentTokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+      const sectionTokens = splitExpressionSections(currentTokens)[sectionIdx];
+      if (!sectionTokens) return;
+      const group = buildKmapCircleGroup({
+        sectionTokens,
+        sectionIdx,
+        layout,
+        variables,
+        cells,
+        overlayRect,
+        paletteOffset,
+      });
+      if (!group) return;
+      group.classList.add('kmap-circle-fade-in');
+      svg.appendChild(group);
+      requestAnimationFrame(() => {
+        group.classList.remove('kmap-circle-fade-in');
+      });
+    }, kmapCircleFadeDuration);
+    sectionAnimations[sectionIdx] = { timeoutId, signature };
   });
 }
 
@@ -4454,12 +4575,6 @@ function attachEvents() {
   kmapList.addEventListener('dragstart', (e) => {
     const tokenEl = e.target.closest('.kmap-token, .kmap-expr-token');
     if (!tokenEl) return;
-    if (
-      tokenEl.classList.contains('kmap-expr-token') ||
-      tokenEl.classList.contains('kmap-token')
-    ) {
-      setShowKmapCircles(false);
-    }
     const type = tokenEl.dataset.tokenType;
     const value = tokenEl.dataset.tokenValue;
     const fromIndex = tokenEl.classList.contains('kmap-expr-token')

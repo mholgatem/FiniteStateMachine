@@ -1183,6 +1183,16 @@ svg text {
   overflow: visible;
 }
 
+.kmap-circle-section {
+  opacity: 1;
+  transition: opacity 1.5s ease;
+}
+
+.kmap-circle-section.kmap-circle-fade-out,
+.kmap-circle-section.kmap-circle-fade-in {
+  opacity: 0;
+}
+
 .kmap-circle-rect {
   stroke-linejoin: round;
 }
