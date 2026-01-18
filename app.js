@@ -2713,6 +2713,14 @@ function buildKmapCircleGroup({
   return group;
 }
 
+function clearKmapCircleAnimations(kmap) {
+  if (!kmap?.circleSectionAnimations) return;
+  Object.values(kmap.circleSectionAnimations).forEach((entry) => {
+    if (entry?.timeoutId) window.clearTimeout(entry.timeoutId);
+  });
+  kmap.circleSectionAnimations = {};
+}
+
 function renderKmapCircles(root = null) {
   const context = root || document;
 
@@ -2738,6 +2746,7 @@ function renderKmapCircles(root = null) {
     const tokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
     const sections = splitExpressionSections(tokens);
     if (!sections.length) return;
+    clearKmapCircleAnimations(kmap);
     const cells = collectKmapCells(kmap, card, layout);
     const overlay = card.querySelector('.kmap-circle-overlay');
     if (!overlay) return;
@@ -2791,22 +2800,32 @@ function renderKmapCircleSectionUpdate(kmap, sectionIndices, tokens) {
 
   const layout = buildKmapLayout(kmap);
   const variables = kmapVariablesForLayout(layout);
-  const sections = splitExpressionSections(tokens);
   const cells = collectKmapCells(kmap, card, layout);
   const overlayRect = overlay.getBoundingClientRect();
   const paletteOffset = state.kmaps.findIndex((m) => m.id === kmap.id) % kmapCirclePalette.length;
+  const sectionAnimations = kmap.circleSectionAnimations || {};
+  const nextSignatures = getKmapSectionSignatures(tokens);
+  kmap.circleSectionAnimations = sectionAnimations;
 
   sectionIndices.forEach((sectionIdx) => {
+    const signature = nextSignatures[sectionIdx] ?? null;
+    const existingAnimation = sectionAnimations[sectionIdx];
+    if (existingAnimation?.timeoutId) {
+      window.clearTimeout(existingAnimation.timeoutId);
+    }
     const existingGroup = svg.querySelector(`[data-section-index="${sectionIdx}"]`);
     if (existingGroup) {
       existingGroup.classList.add('kmap-circle-fade-out');
     }
 
-    window.setTimeout(() => {
-      if (existingGroup && existingGroup.parentNode) {
-        existingGroup.parentNode.removeChild(existingGroup);
+    const timeoutId = window.setTimeout(() => {
+      if ((kmap.circleSectionSignatures?.[sectionIdx] ?? null) !== signature) return;
+      const staleGroup = svg.querySelector(`[data-section-index="${sectionIdx}"]`);
+      if (staleGroup && staleGroup.parentNode) {
+        staleGroup.parentNode.removeChild(staleGroup);
       }
-      const sectionTokens = sections[sectionIdx];
+      const currentTokens = kmap.expressionTokens || expressionStringToTokens(kmap.expression || '');
+      const sectionTokens = splitExpressionSections(currentTokens)[sectionIdx];
       if (!sectionTokens) return;
       const group = buildKmapCircleGroup({
         sectionTokens,
@@ -2824,6 +2843,7 @@ function renderKmapCircleSectionUpdate(kmap, sectionIndices, tokens) {
         group.classList.remove('kmap-circle-fade-in');
       });
     }, kmapCircleFadeDuration);
+    sectionAnimations[sectionIdx] = { timeoutId, signature };
   });
 }
 
