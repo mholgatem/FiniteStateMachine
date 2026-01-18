@@ -39,6 +39,7 @@ const diagram = document.getElementById('diagram');
 const viewport = document.getElementById('viewport');
 const paletteList = document.getElementById('paletteList');
 const palettePane = document.querySelector('.state-palette');
+const workspace = document.querySelector('.workspace');
 const stateTableBody = document.querySelector('#stateTable tbody');
 const toggleIoModeBtn = document.getElementById('toggleIoMode');
 const stateDefinitionDialog = document.getElementById('stateDefinitionDialog');
@@ -3409,12 +3410,14 @@ function openTransitionDrawer() {
   document.body.classList.add('drawer-open');
   document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
   palettePane?.classList.add('collapsed');
+  workspace?.classList.add('palette-collapsed');
 }
 
 function closeTransitionDrawer() {
   transitionDrawer.classList.remove('open');
   document.body.classList.remove('drawer-open');
   palettePane?.classList.remove('collapsed');
+  workspace?.classList.remove('palette-collapsed');
 }
 
 function updateDrawerWidth(width) {

@@ -139,6 +139,10 @@ body {
   width: 100%;
 }
 
+.workspace.palette-collapsed {
+  grid-template-columns: 1fr;
+}
+
 .state-palette.collapsed {
   display: none;
 }
