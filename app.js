@@ -521,7 +521,16 @@ function updateControls() {
 function renderPalette() {
   paletteList.innerHTML = '';
   const template = document.getElementById('paletteItemTemplate');
-  const unplaced = state.states.filter((s) => !s.placed).sort((a, b) => a.id - b.id);
+  const unplaced = state.states
+    .filter((s) => !s.placed)
+    .sort((a, b) => {
+      const aDecimal = stateBinaryDecimal(a);
+      const bDecimal = stateBinaryDecimal(b);
+      const aOrder = aDecimal ?? a.id;
+      const bOrder = bDecimal ?? b.id;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.id - b.id;
+    });
   unplaced.forEach((st) => {
     const node = template.content.firstElementChild.cloneNode(true);
     node.dataset.id = st.id;
