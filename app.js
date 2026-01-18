@@ -486,6 +486,7 @@ function initStates() {
     binary: i.toString(2).padStart(Math.ceil(Math.log2(state.numStates)), '0'),
     outputs: state.outputs.map(() => '0'),
     placed: false,
+    hasBeenPlaced: false,
     x: 120 + i * 25,
     y: 120 + i * 20,
     radius: 38,
@@ -524,7 +525,8 @@ function renderPalette() {
   unplaced.forEach((st) => {
     const node = template.content.firstElementChild.cloneNode(true);
     node.dataset.id = st.id;
-    node.querySelector('.state-circle').textContent = st.id;
+    const decimalValue = stateBinaryDecimal(st);
+    node.querySelector('.state-circle').textContent = decimalValue ?? st.id;
     node.querySelector('.state-label').textContent = st.label;
     node.querySelector('.state-extra').innerHTML =
       state.type === 'moore'
@@ -864,6 +866,16 @@ function drawState(st) {
     circle.classList.add('missing');
   }
 
+  const decimalValue = stateBinaryDecimal(st);
+  const decimalText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  decimalText.setAttribute('x', st.x);
+  decimalText.setAttribute('y', st.y + st.radius * 0.07);
+  decimalText.setAttribute('text-anchor', 'middle');
+  decimalText.setAttribute('dominant-baseline', 'middle');
+  decimalText.setAttribute('font-size', st.radius * 1.7);
+  decimalText.classList.add('state-decimal-text');
+  decimalText.textContent = decimalValue ?? '';
+
   const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   textLabel.setAttribute('x', st.x);
   textLabel.setAttribute('y', st.y - 6);
@@ -882,6 +894,7 @@ function drawState(st) {
   }
 
   group.appendChild(circle);
+  group.appendChild(decimalText);
   group.appendChild(textLabel);
   group.appendChild(textId);
   viewport.appendChild(group);
@@ -944,6 +957,16 @@ function stateBinaryCode(stateId, bitCount) {
   if (!st) return null;
   const cleaned = (st.binary || stateId.toString(2)).replace(/[^01]/g, '');
   return cleaned.padStart(bitCount, '0').slice(-bitCount);
+}
+
+function stateBinaryDecimal(st) {
+  if (!st) return null;
+  const bitCount = stateBitCount();
+  const cleaned = (st.binary || st.id.toString(2)).replace(/[^01]/g, '');
+  if (!cleaned) return null;
+  const padded = cleaned.padStart(bitCount, '0').slice(-bitCount);
+  const parsed = parseInt(padded, 2);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 function expectedOutputsForTransition(tr) {
@@ -1436,7 +1459,7 @@ function buildChoiceRow(container, name, index, currentValue, prefix) {
   const row = document.createElement('div');
   row.className = 'io-row';
   const label = document.createElement('label');
-  label.textContent = name || `Var ${index + 1}`;
+  label.innerHTML = formatScriptedText(name || `Var ${index + 1}`);
   row.appendChild(label);
 
   const options = document.createElement('div');
@@ -1653,6 +1676,12 @@ function loadState(data) {
     outputs: targetOutputs,
     transitionTable: decompressedTransitionTable,
   });
+  if (Array.isArray(state.states)) {
+    state.states = state.states.map((st) => ({
+      ...st,
+      hasBeenPlaced: st.hasBeenPlaced ?? !!st.placed,
+    }));
+  }
   state.numStates = targetNumStates;
   state.inputs = targetInputs;
   state.outputs = targetOutputs;
@@ -2974,7 +3003,7 @@ function renderKmapDialogDropzones() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'kmap-expr-placeholder';
-      placeholder.textContent = 'Drag a column here to set the function identifier';
+      placeholder.textContent = 'Drag a token here to set the value that you want to solve for';
       kmapLabelDropzone.appendChild(placeholder);
     }
   }
@@ -2997,7 +3026,7 @@ function renderKmapDialogDropzones() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'kmap-expr-placeholder';
-      placeholder.textContent = 'Drag columns here to set the variable order (min 2, max 6)';
+      placeholder.textContent = 'Drag tokens here to set the table variables (min 2, max 6)';
       kmapVariablesDropzone.appendChild(placeholder);
     }
   }
@@ -4622,6 +4651,10 @@ function attachEvents() {
     st.x = pt.x;
     st.y = pt.y;
     st.placed = true;
+    if (!wasPlaced && !st.hasBeenPlaced) {
+      st.radius *= 1.5;
+      st.hasBeenPlaced = true;
+    }
     renderPalette();
     renderDiagram();
     if (!wasPlaced) {
