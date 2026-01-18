@@ -4454,12 +4454,6 @@ function attachEvents() {
   kmapList.addEventListener('dragstart', (e) => {
     const tokenEl = e.target.closest('.kmap-token, .kmap-expr-token');
     if (!tokenEl) return;
-    if (
-      tokenEl.classList.contains('kmap-expr-token') ||
-      tokenEl.classList.contains('kmap-token')
-    ) {
-      setShowKmapCircles(false);
-    }
     const type = tokenEl.dataset.tokenType;
     const value = tokenEl.dataset.tokenValue;
     const fromIndex = tokenEl.classList.contains('kmap-expr-token')
