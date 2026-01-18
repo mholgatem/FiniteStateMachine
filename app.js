@@ -3408,11 +3408,13 @@ function openTransitionDrawer() {
   transitionDrawer.classList.add('open');
   document.body.classList.add('drawer-open');
   document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
+  palettePane?.classList.add('collapsed');
 }
 
 function closeTransitionDrawer() {
   transitionDrawer.classList.remove('open');
   document.body.classList.remove('drawer-open');
+  palettePane?.classList.remove('collapsed');
 }
 
 function updateDrawerWidth(width) {
