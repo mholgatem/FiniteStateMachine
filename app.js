@@ -4833,6 +4833,10 @@ function attachEvents() {
       selectedArrowId = id;
       selectedStateId = null;
       renderDiagram();
+      if (e.button === 0 && e.altKey) {
+        openArrowDialog(id);
+        return;
+      }
       const tr = state.transitions.find((t) => t.id === id);
       if (!tr) return;
       const moveHandler = (ev) => {
