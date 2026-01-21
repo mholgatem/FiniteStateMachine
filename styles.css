@@ -67,6 +67,10 @@ body {
   display: none;
 }
 
+button#quickRef {
+  display: none;
+}
+
 .dropdown {
   position: relative;
 }
