@@ -1608,7 +1608,7 @@ function drawState(st) {
   decimalText.setAttribute('dominant-baseline', 'middle');
   decimalText.setAttribute('font-size', st.radius * 1.7);
   decimalText.classList.add('state-decimal-text');
-  decimalText.textContent = decimalValue ?? '';
+  decimalText.textContent = state.type === 'mealy' ? `#${st.id}` : decimalValue ?? '';
 
   const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   textLabel.setAttribute('x', st.x);
@@ -1619,18 +1619,18 @@ function drawState(st) {
 
   const textId = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   textId.setAttribute('x', st.x);
-  textId.setAttribute('y', st.y + 12);
+  textId.setAttribute('y', st.y + 22);
   textId.setAttribute('text-anchor', 'middle');
   if (state.type === 'moore') {
     textId.innerHTML = buildIOText(state.outputs, st.outputs, state.showBinary ? 'binary' : 'vars');
-  } else {
-    textId.textContent = `#${st.id}`;
   }
 
   group.appendChild(circle);
   group.appendChild(decimalText);
   group.appendChild(textLabel);
-  group.appendChild(textId);
+  if (state.type === 'moore') {
+    group.appendChild(textId);
+  }
   viewport.appendChild(group);
 }
 
