@@ -404,6 +404,56 @@ body {
   pointer-events: none;
 }
 
+.diagram-controls {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  z-index: 2;
+}
+
+.diagram-controls-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0;
+}
+
+.diagram-controls-popup {
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem 0.75rem 0.65rem;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+}
+
+.diagram-controls-popup.hidden {
+  display: none;
+}
+
+.diagram-controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.diagram-controls-popup ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
 #diagram {
   width: 100%;
   height: 100%;
@@ -457,6 +507,98 @@ body {
   cursor: move;
   user-select: none;
   border-radius: 12px 12px 0 0;
+}
+
+.coachmark-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.coachmark {
+  position: fixed;
+  max-width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem 0.65rem;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  pointer-events: auto;
+}
+
+.coachmark::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.coachmark[data-placement='right']::after {
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 8px 8px 8px 0;
+  border-color: transparent var(--surface) transparent transparent;
+}
+
+.coachmark[data-placement='left']::after {
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 8px 0 8px 8px;
+  border-color: transparent transparent transparent var(--surface);
+}
+
+.coachmark[data-placement='top']::after {
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  border-width: 8px 8px 0 8px;
+  border-color: var(--surface) transparent transparent transparent;
+}
+
+.coachmark[data-placement='bottom']::after {
+  left: 50%;
+  top: -8px;
+  transform: translateX(-50%);
+  border-width: 0 8px 8px 8px;
+  border-color: transparent transparent var(--surface) transparent;
+}
+
+.coachmark-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.coachmark-title {
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.coachmark-text {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+
+.coachmark-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.coachmark-actions .ghost,
+.coachmark-actions .primary {
+  padding: 0.25rem 0.65rem;
 }
 
 .state-definition-dialog .dialog-actions.end {
