@@ -5317,7 +5317,7 @@ function attachEvents() {
     markDirty();
   });
 
-  transitionDrawer.addEventListener('dragend', () => {
+  const handleTransitionDragEnd = () => {
     document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
     transitionColumnDragState = null;
     if (transitionVerifyPending && !transitionVerifyHint) {
@@ -5336,7 +5336,8 @@ function attachEvents() {
         },
       );
     }
-  });
+  };
+  document.addEventListener('dragend', handleTransitionDragEnd);
 
   if (transitionColumnDropzone) {
     transitionColumnDropzone.addEventListener('click', (e) => {
