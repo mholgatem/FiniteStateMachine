@@ -1608,7 +1608,7 @@ function drawState(st) {
   decimalText.setAttribute('dominant-baseline', 'middle');
   decimalText.setAttribute('font-size', st.radius * 1.7);
   decimalText.classList.add('state-decimal-text');
-  decimalText.textContent = state.type === 'mealy' ? `#${st.id}` : decimalValue ?? '';
+  decimalText.textContent = decimalValue ?? '';
 
   const textLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   textLabel.setAttribute('x', st.x);
