@@ -829,8 +829,11 @@ function showKmapDialogTour() {
     },
     {
       key: onboardingKeys.kmapDialogFunction,
-      onClose: () => {
+      onClose: (reason) => {
         kmapDialogFunctionHint = null;
+        if (reason === 'action') {
+          showKmapVariablesHint();
+        }
       },
     },
   );
@@ -848,8 +851,11 @@ function showKmapVariablesHint() {
     },
     {
       key: onboardingKeys.kmapDialogVariables,
-      onClose: () => {
+      onClose: (reason) => {
         kmapDialogVariableHint = null;
+        if (reason === 'action') {
+          showKmapDirectionHint();
+        }
       },
     },
   );
