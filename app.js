@@ -626,11 +626,19 @@ function showResizeStateHint(stateId) {
       text: 'Ctrl + Drag to resize a state.',
       target: () => diagram.querySelector(`g.state-group[data-id="${stateId}"] circle.state-node`),
       placement: 'right',
+      actionLabel: 'Got it',
     },
     {
       key: onboardingKeys.diagramResizeState,
       onClose: () => {
         resizeStateHint = null;
+        pendingPlaceSecondHint = true;
+        showDiagramPanZoomHints(() => {
+          if (pendingPlaceSecondHint) {
+            pendingPlaceSecondHint = false;
+            showPlaceSecondStateHint();
+          }
+        });
       },
     },
   );
