@@ -195,6 +195,7 @@ let transitionDrawerOpenedOnce = false;
 let transitionTrayHint = null;
 let transitionVerifyHint = null;
 let transitionVerifyPending = false;
+let transitionTableInputHint = null;
 let unusedStatesHint = null;
 let moveStateHint = null;
 let resizeStateHint = null;
@@ -335,10 +336,10 @@ function showManualCoachmark(step, { key, onClose } = {}) {
     popup.remove();
     window.removeEventListener('resize', reposition);
     if (key) setCoachmarkSeen(key);
-    if (onClose) onClose(reason);
     if (activeCoachmark && activeCoachmark.popup === popup) {
       activeCoachmark = null;
     }
+    if (onClose) onClose(reason);
   };
   const isNext = isNextAction(actionLabel);
   popup.querySelector('.coachmark-action').addEventListener('click', () => close('action'));
@@ -633,11 +634,13 @@ function showResizeStateHint(stateId) {
       onClose: () => {
         resizeStateHint = null;
         pendingPlaceSecondHint = true;
-        showDiagramPanZoomHints(() => {
-          if (pendingPlaceSecondHint) {
-            pendingPlaceSecondHint = false;
-            showPlaceSecondStateHint();
-          }
+        requestAnimationFrame(() => {
+          showDiagramPanZoomHints(() => {
+            if (pendingPlaceSecondHint) {
+              pendingPlaceSecondHint = false;
+              showPlaceSecondStateHint();
+            }
+          });
         });
       },
     },
@@ -796,7 +799,8 @@ function showTransitionTableTour() {
 }
 
 function showTransitionTableInputHint(target) {
-  showCoachmarkOnce(onboardingKeys.transitionTableInput, [
+  if (transitionTableInputHint || hasSeenCoachmark(onboardingKeys.transitionTableInput)) return;
+  transitionTableInputHint = showManualCoachmark(
     {
       title: 'Quick navigation',
       text: 'Use arrow keys to move quickly between transition table cells.',
@@ -804,7 +808,13 @@ function showTransitionTableInputHint(target) {
       placement: 'bottom',
       actionLabel: 'Got it',
     },
-  ]);
+    {
+      key: onboardingKeys.transitionTableInput,
+      onClose: () => {
+        transitionTableInputHint = null;
+      },
+    },
+  );
 }
 
 function showKmapDialogTour() {
@@ -815,11 +825,15 @@ function showKmapDialogTour() {
       text: 'Drag a token here to set the function identifier.',
       target: () => kmapLabelDropzone,
       placement: 'right',
+      actionLabel: 'Next',
     },
     {
       key: onboardingKeys.kmapDialogFunction,
-      onClose: () => {
+      onClose: (reason) => {
         kmapDialogFunctionHint = null;
+        if (reason === 'action') {
+          showKmapVariablesHint();
+        }
       },
     },
   );
@@ -833,11 +847,15 @@ function showKmapVariablesHint() {
       text: 'Drag tokens here to set the independent variables (MSB → LSB).',
       target: () => kmapVariablesDropzone,
       placement: 'right',
+      actionLabel: 'Next',
     },
     {
       key: onboardingKeys.kmapDialogVariables,
-      onClose: () => {
+      onClose: (reason) => {
         kmapDialogVariableHint = null;
+        if (reason === 'action') {
+          showKmapDirectionHint();
+        }
       },
     },
   );
@@ -5180,6 +5198,10 @@ function attachEvents() {
     if (target.tagName !== 'INPUT') return;
     const { key } = e;
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) return;
+    if (transitionTableInputHint) {
+      transitionTableInputHint('navigate');
+      transitionTableInputHint = null;
+    }
     const rowIdx = parseInt(target.dataset.rowIndex, 10);
     const colIdx = parseInt(target.dataset.valueColIndex, 10);
     if (Number.isNaN(rowIdx) || Number.isNaN(colIdx)) return;
