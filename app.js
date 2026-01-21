@@ -5785,15 +5785,6 @@ function attachEvents() {
         if (showResizeOnRelease) {
           showResizeStateHint(id);
         }
-        if (resized) {
-          pendingPlaceSecondHint = true;
-          showDiagramPanZoomHints(() => {
-            if (pendingPlaceSecondHint) {
-              pendingPlaceSecondHint = false;
-              showPlaceSecondStateHint();
-            }
-          });
-        }
       };
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
