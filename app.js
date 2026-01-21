@@ -2687,10 +2687,11 @@ function updateKmapExpressionTokens(kmap, tokens, tray) {
   const previousSignatures = kmap.circleSectionSignatures || getKmapSectionSignatures(previousTokens);
   const nextSignatures = getKmapSectionSignatures(tokens);
   const changedSections = diffKmapSectionSignatures(previousSignatures, nextSignatures);
+  const hadPreviousSections = previousSignatures.length > 0;
   kmap.expressionTokens = tokens;
   kmap.expression = tokensToCanonical(tokens) || '';
   if (tray) renderExpressionTray(tray, tokens, kmap.id);
-  if (showKmapCircles && changedSections.length) {
+  if (showKmapCircles && changedSections.length && hadPreviousSections) {
     renderKmapCircleSectionUpdate(kmap, changedSections, tokens);
   } else {
     scheduleKmapCircleRender();
