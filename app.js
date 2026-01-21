@@ -135,6 +135,10 @@ function populateStateCountSelectors() {
 }
 
 function closeDialog(id) {
+  if (id === 'stateDefinitionDialog') {
+    setDefinitionDialogOpen(false);
+    return;
+  }
   document.getElementById(id).classList.add('hidden');
 }
 
@@ -163,17 +167,44 @@ function uniqueId(prefix = 'id') {
 
 const onboardingKeys = {
   stateDefinition: 'fsm_onboarding_state_definition_v1',
+  stateIoHint: 'fsm_onboarding_state_io_hint_v1',
   diagramUnused: 'fsm_onboarding_diagram_unused_v1',
-  diagramFirstState: 'fsm_onboarding_diagram_first_state_v1',
-  diagramFirstArrow: 'fsm_onboarding_diagram_first_arrow_v1',
+  diagramMoveState: 'fsm_onboarding_diagram_move_state_v1',
+  diagramResizeState: 'fsm_onboarding_diagram_resize_state_v1',
+  diagramPlaceSecond: 'fsm_onboarding_diagram_place_second_v1',
+  diagramCreateArrow: 'fsm_onboarding_diagram_create_arrow_v1',
+  diagramRepositionArrow: 'fsm_onboarding_diagram_reposition_arrow_v1',
+  diagramLabelArrow: 'fsm_onboarding_diagram_label_arrow_v1',
+  diagramPanZoom: 'fsm_onboarding_diagram_pan_zoom_v1',
   transitionTable: 'fsm_onboarding_transition_table_v1',
   transitionTableInput: 'fsm_onboarding_transition_table_input_v1',
-  kmapDialog: 'fsm_onboarding_kmap_dialog_v1',
+  kmapDialogFunction: 'fsm_onboarding_kmap_dialog_function_v1',
+  kmapDialogVariables: 'fsm_onboarding_kmap_dialog_variables_v1',
+  kmapDialogDirection: 'fsm_onboarding_kmap_dialog_direction_v1',
   kmapFirst: 'fsm_onboarding_kmap_first_v1',
+  kmapCircles: 'fsm_onboarding_kmap_circles_v1',
 };
 
 const coachmarkQueue = [];
 let coachmarkSequenceActive = false;
+let activeCoachmark = null;
+let pendingUnusedStatesHint = false;
+let allowCreateArrowHint = false;
+let transitionTrayHint = null;
+let transitionVerifyHint = null;
+let transitionVerifyPending = false;
+let moveStateHint = null;
+let resizeStateHint = null;
+let placeSecondStateHint = null;
+let createArrowHint = null;
+let repositionArrowHint = null;
+let labelArrowHint = null;
+let panZoomHinted = false;
+let kmapDialogFunctionHint = null;
+let kmapDialogVariableHint = null;
+let kmapDialogDirectionHint = null;
+let kmapFirstHint = null;
+let kmapCircleHint = null;
 
 function hasSeenCoachmark(key) {
   try {
@@ -263,6 +294,47 @@ function buildCoachmarkElement({ title, text, actionLabel }) {
   popup.appendChild(actions);
 
   return popup;
+}
+
+function closeActiveCoachmark(reason) {
+  if (activeCoachmark) {
+    activeCoachmark.close(reason);
+  }
+}
+
+function showManualCoachmark(step, { key, onClose } = {}) {
+  if (!coachmarkLayer) return null;
+  if (key && hasSeenCoachmark(key)) return null;
+  if (coachmarkSequenceActive) return null;
+  closeActiveCoachmark('replace');
+  const popup = buildCoachmarkElement({
+    title: step.title,
+    text: step.text,
+    actionLabel: step.actionLabel || 'Got it',
+  });
+  coachmarkLayer.appendChild(popup);
+  const target = resolveCoachmarkTarget(step.target);
+  if (target) {
+    positionCoachmark(popup, target, step.placement || 'right');
+  }
+  const reposition = () => {
+    const newTarget = resolveCoachmarkTarget(step.target);
+    if (newTarget) positionCoachmark(popup, newTarget, step.placement || 'right');
+  };
+  window.addEventListener('resize', reposition);
+  const close = (reason) => {
+    popup.remove();
+    window.removeEventListener('resize', reposition);
+    if (key) setCoachmarkSeen(key);
+    if (onClose) onClose(reason);
+    if (activeCoachmark && activeCoachmark.popup === popup) {
+      activeCoachmark = null;
+    }
+  };
+  popup.querySelector('.coachmark-action').addEventListener('click', () => close('action'));
+  popup.querySelector('.coachmark-close').addEventListener('click', () => close('close'));
+  activeCoachmark = { popup, close };
+  return close;
 }
 
 function runCoachmarkSequence(steps, onComplete) {
@@ -404,7 +476,7 @@ function startStateDefinitionTour() {
     {
       title: 'State Binary',
       text: 'Assign the state number in binary.',
-      target: () => document.getElementById('stateBinaryHeader') || stateTableBody.querySelector('input[data-field="binary"]'),
+      target: () => stateTableBody.querySelector('tr:first-child input[data-field="binary"]'),
       placement: 'bottom',
     },
   ];
@@ -412,7 +484,7 @@ function startStateDefinitionTour() {
     steps.push({
       title: 'State Outputs',
       text: 'Assign the output values for each state, comma separated (0/1/X).',
-      target: () => document.getElementById('stateOutputsHeader') || stateTableBody.querySelector('input[data-field="outputs"]'),
+      target: () => stateTableBody.querySelector('tr:first-child input[data-field="outputs"]'),
       placement: 'bottom',
     });
   }
@@ -423,6 +495,24 @@ function startStateDefinitionTour() {
     placement: 'right',
   });
   showCoachmarkOnce(onboardingKeys.stateDefinition, steps);
+}
+
+function showStateIoHintIfNeeded() {
+  if (hasSeenCoachmark(onboardingKeys.stateIoHint)) return;
+  const inputsEmpty = !document.getElementById('inputsControl')?.value.trim();
+  const outputsEmpty = !document.getElementById('outputsControl')?.value.trim();
+  if (!inputsEmpty && !outputsEmpty) return;
+  const target = inputsEmpty
+    ? document.getElementById('inputsControl')
+    : document.getElementById('outputsControl');
+  showCoachmarkOnce(onboardingKeys.stateIoHint, [
+    {
+      title: 'Input/output variables',
+      text: 'Enter your comma separated input and out variable names. (Hint: include _ or ^ for subscript or superscript)',
+      target,
+      placement: 'bottom',
+    },
+  ]);
 }
 
 function showDiagramUnusedStatesCoachmark() {
@@ -436,8 +526,9 @@ function showDiagramUnusedStatesCoachmark() {
   ]);
 }
 
-function startDiagramFirstStateTour(stateId) {
-  showCoachmarkOnce(onboardingKeys.diagramFirstState, [
+function showMoveStateHint(stateId) {
+  if (moveStateHint || hasSeenCoachmark(onboardingKeys.diagramMoveState)) return;
+  moveStateHint = showManualCoachmark(
     {
       title: 'Move states',
       text: 'Grab/drag to move states around.',
@@ -445,17 +536,110 @@ function startDiagramFirstStateTour(stateId) {
       placement: 'right',
     },
     {
+      key: onboardingKeys.diagramMoveState,
+      onClose: () => {
+        moveStateHint = null;
+      },
+    },
+  );
+}
+
+function showResizeStateHint(stateId) {
+  if (resizeStateHint || hasSeenCoachmark(onboardingKeys.diagramResizeState)) return;
+  resizeStateHint = showManualCoachmark(
+    {
       title: 'Resize states',
       text: 'Ctrl + Drag to resize a state.',
       target: () => diagram.querySelector(`g.state-group[data-id="${stateId}"] circle.state-node`),
       placement: 'right',
     },
     {
-      title: 'Create arrows',
-      text: 'Alt + Drag (or Right-click Drag) to add an arrow between states.',
-      target: () => diagram.querySelector(`g.state-group[data-id="${stateId}"] circle.state-node`),
+      key: onboardingKeys.diagramResizeState,
+      onClose: () => {
+        resizeStateHint = null;
+      },
+    },
+  );
+}
+
+function showPlaceSecondStateHint() {
+  if (placeSecondStateHint || hasSeenCoachmark(onboardingKeys.diagramPlaceSecond)) return;
+  if (state.states.filter((s) => s.placed).length >= 2) return;
+  placeSecondStateHint = showManualCoachmark(
+    {
+      title: 'Place another state',
+      text: 'Place a second state to start adding transition arrows.',
+      target: () => palettePane || paletteList,
       placement: 'right',
     },
+    {
+      key: onboardingKeys.diagramPlaceSecond,
+      onClose: () => {
+        placeSecondStateHint = null;
+      },
+    },
+  );
+}
+
+function showCreateArrowHint(targetStateId) {
+  if (createArrowHint || hasSeenCoachmark(onboardingKeys.diagramCreateArrow)) return;
+  createArrowHint = showManualCoachmark(
+    {
+      title: 'Create arrows',
+      text: 'Alt + Drag (or Right-click Drag) to add an arrow between states.',
+      target: () => diagram.querySelector(`g.state-group[data-id="${targetStateId}"] circle.state-node`),
+      placement: 'right',
+    },
+    {
+      key: onboardingKeys.diagramCreateArrow,
+      onClose: () => {
+        createArrowHint = null;
+      },
+    },
+  );
+}
+
+function showRepositionArrowHint(transitionId) {
+  if (repositionArrowHint || hasSeenCoachmark(onboardingKeys.diagramRepositionArrow)) return;
+  repositionArrowHint = showManualCoachmark(
+    {
+      title: 'Reposition arrows',
+      text: 'Grab the blue dot to reposition or curve an arrow.',
+      target: () => diagram.querySelector(`.arc-handle[data-id="${transitionId}"]`),
+      placement: 'right',
+    },
+    {
+      key: onboardingKeys.diagramRepositionArrow,
+      onClose: () => {
+        repositionArrowHint = null;
+      },
+    },
+  );
+}
+
+function showArrowLabelHint(transitionId) {
+  if (labelArrowHint || hasSeenCoachmark(onboardingKeys.diagramLabelArrow)) return;
+  labelArrowHint = showManualCoachmark(
+    {
+      title: 'Set arrow values',
+      text: 'Alt + Click (or Right-click) the arrow label to set inputs (and outputs for Mealy).',
+      target: () => diagram.querySelector(`.label-handle[data-id="${transitionId}"]`),
+      placement: 'right',
+    },
+    {
+      key: onboardingKeys.diagramLabelArrow,
+      onClose: () => {
+        labelArrowHint = null;
+        showDiagramPanZoomHints();
+      },
+    },
+  );
+}
+
+function showDiagramPanZoomHints() {
+  if (panZoomHinted || hasSeenCoachmark(onboardingKeys.diagramPanZoom)) return;
+  panZoomHinted = true;
+  showCoachmarkOnce(onboardingKeys.diagramPanZoom, [
     {
       title: 'Pan the canvas',
       text: 'Shift + Drag (or middle-click drag) to pan the diagram.',
@@ -464,32 +648,16 @@ function startDiagramFirstStateTour(stateId) {
     },
     {
       title: 'Zoom the canvas',
-      text: 'Scroll to zoom in or out.',
+      text: 'Scroll to zoom the diagram.',
       target: () => diagram,
       placement: 'top',
     },
   ]);
 }
 
-function startDiagramFirstArrowTour(transitionId) {
-  showCoachmarkOnce(onboardingKeys.diagramFirstArrow, [
-    {
-      title: 'Reposition arrows',
-      text: 'Grab the blue dot to reposition or curve an arrow.',
-      target: () => diagram.querySelector(`.arc-handle[data-id="${transitionId}"]`),
-      placement: 'right',
-    },
-    {
-      title: 'Set arrow values',
-      text: 'Alt + Click (or Right-click) the arrow label to set inputs (and outputs for Mealy).',
-      target: () => diagram.querySelector(`.label-handle[data-id="${transitionId}"]`),
-      placement: 'right',
-    },
-  ]);
-}
-
 function showTransitionTableTour() {
-  showCoachmarkOnce(onboardingKeys.transitionTable, [
+  if (transitionTrayHint || hasSeenCoachmark(onboardingKeys.transitionTable)) return;
+  transitionTrayHint = showManualCoachmark(
     {
       title: 'Column tray',
       text: 'Drag these tokens to add columns to your state transition table.',
@@ -497,12 +665,27 @@ function showTransitionTableTour() {
       placement: 'bottom',
     },
     {
-      title: 'Verify Transition Table',
-      text: 'This only checks your table against the diagram—it does not validate correctness.',
-      target: () => document.getElementById('verifyTransitionTable'),
-      placement: 'left',
+      key: onboardingKeys.transitionTable,
+      onClose: () => {
+        transitionTrayHint = null;
+        if (!transitionVerifyHint && !transitionVerifyPending) {
+          transitionVerifyHint = showManualCoachmark(
+            {
+              title: 'Verify Transition Table',
+              text: 'This only checks your table against the diagram—it does not validate correctness.',
+              target: () => document.getElementById('verifyTransitionTable'),
+              placement: 'left',
+            },
+            {
+              onClose: () => {
+                transitionVerifyHint = null;
+              },
+            },
+          );
+        }
+      },
     },
-  ]);
+  );
 }
 
 function showTransitionTableInputHint(target) {
@@ -518,7 +701,8 @@ function showTransitionTableInputHint(target) {
 }
 
 function showKmapDialogTour() {
-  showCoachmarkOnce(onboardingKeys.kmapDialog, [
+  if (kmapDialogFunctionHint || hasSeenCoachmark(onboardingKeys.kmapDialogFunction)) return;
+  kmapDialogFunctionHint = showManualCoachmark(
     {
       title: 'Function identifier',
       text: 'Drag a token here to set the function identifier.',
@@ -526,24 +710,85 @@ function showKmapDialogTour() {
       placement: 'right',
     },
     {
+      key: onboardingKeys.kmapDialogFunction,
+      onClose: () => {
+        kmapDialogFunctionHint = null;
+      },
+    },
+  );
+}
+
+function showKmapVariablesHint() {
+  if (kmapDialogVariableHint || hasSeenCoachmark(onboardingKeys.kmapDialogVariables)) return;
+  kmapDialogVariableHint = showManualCoachmark(
+    {
       title: 'Independent variables',
       text: 'Drag tokens here to set the independent variables (MSB → LSB).',
       target: () => kmapVariablesDropzone,
       placement: 'right',
     },
-  ]);
+    {
+      key: onboardingKeys.kmapDialogVariables,
+      onClose: () => {
+        kmapDialogVariableHint = null;
+      },
+    },
+  );
+}
+
+function showKmapDirectionHint() {
+  if (kmapDialogDirectionHint || hasSeenCoachmark(onboardingKeys.kmapDialogDirection)) return;
+  kmapDialogDirectionHint = showManualCoachmark(
+    {
+      title: 'Map direction',
+      text: 'This orders the bits from most significant to least significant horizontally or vertically.',
+      target: () => kmapDirectionInput,
+      placement: 'right',
+    },
+    {
+      key: onboardingKeys.kmapDialogDirection,
+      onClose: () => {
+        kmapDialogDirectionHint = null;
+      },
+    },
+  );
 }
 
 function showKmapFirstUseHint() {
-  showCoachmarkOnce(onboardingKeys.kmapFirst, [
+  if (kmapFirstHint || hasSeenCoachmark(onboardingKeys.kmapFirst)) return;
+  kmapFirstHint = showManualCoachmark(
     {
       title: 'Fill in your K-map',
       text:
-        "Fill out your K-map with 0/1/X values, then drag tokens into the function tray to build your expression and create circles.",
+        "Fill out your K-map with 0/1/X values, then drag tokens into the function tray below to build your expression and create circles.",
       target: () => kmapList.querySelector('.kmap-cell-input'),
       placement: 'left',
     },
-  ]);
+    {
+      key: onboardingKeys.kmapFirst,
+      onClose: () => {
+        kmapFirstHint = null;
+      },
+    },
+  );
+}
+
+function showKmapCircleHint() {
+  if (kmapCircleHint || hasSeenCoachmark(onboardingKeys.kmapCircles)) return;
+  kmapCircleHint = showManualCoachmark(
+    {
+      title: 'K-map circles',
+      text: 'Toggle the circles that come from your expression by clicking this button.',
+      target: () => kmapCircleToggle,
+      placement: 'right',
+    },
+    {
+      key: onboardingKeys.kmapCircles,
+      onClose: () => {
+        kmapCircleHint = null;
+      },
+    },
+  );
 }
 
 function setDefinitionDialogOpen(open) {
@@ -553,6 +798,14 @@ function setDefinitionDialogOpen(open) {
     applyStateDefinitionWindowLayout();
     const focusTarget = stateDefinitionDialog.querySelector('input, select, button');
     if (focusTarget) focusTarget.focus();
+    requestAnimationFrame(() => {
+      showStateIoHintIfNeeded();
+    });
+  } else if (pendingUnusedStatesHint) {
+    pendingUnusedStatesHint = false;
+    requestAnimationFrame(() => {
+      showDiagramUnusedStatesCoachmark();
+    });
   }
 }
 
@@ -3633,6 +3886,13 @@ function handleKmapDialogDrop(e) {
     setKmapDialogSelection('label');
     renderKmapDialogDropzones();
     validateKmapDialog();
+    if (kmapDialogFunctionHint) {
+      kmapDialogFunctionHint('completed');
+      kmapDialogFunctionHint = null;
+      requestAnimationFrame(() => {
+        showKmapVariablesHint();
+      });
+    }
     return;
   }
 
@@ -3666,6 +3926,13 @@ function handleKmapDialogDrop(e) {
     setKmapDialogSelection('variables', Math.min(selectionIndex, kmapDialogSelections.variableTokens.length - 1));
     renderKmapDialogDropzones();
     validateKmapDialog();
+    if (kmapDialogVariableHint) {
+      kmapDialogVariableHint('completed');
+      kmapDialogVariableHint = null;
+      requestAnimationFrame(() => {
+        showKmapDirectionHint();
+      });
+    }
   }
 }
 
@@ -3726,6 +3993,12 @@ function openKmapDialog() {
   openDialog('kmapCreateDialog');
   requestAnimationFrame(() => {
     showKmapDialogTour();
+    if (!kmapDialogFunctionHint && kmapDialogSelections.functionToken) {
+      showKmapVariablesHint();
+    }
+    if (!kmapDialogVariableHint && kmapDialogSelections.variableTokens.length) {
+      showKmapDirectionHint();
+    }
   });
 }
 
@@ -3880,9 +4153,9 @@ function openTransitionDrawer() {
   document.documentElement.style.setProperty('--drawer-width', `${drawerWidth}px`);
   palettePane?.classList.add('collapsed');
   workspace?.classList.add('palette-collapsed');
-  requestAnimationFrame(() => {
+  setTimeout(() => {
     showTransitionTableTour();
-  });
+  }, 300);
 }
 
 function closeTransitionDrawer() {
@@ -4456,9 +4729,9 @@ function attachEvents() {
     renderDiagram();
     state.kmaps = [];
     renderKmaps();
+    pendingUnusedStatesHint = true;
     requestAnimationFrame(() => {
       startStateDefinitionTour();
-      showDiagramUnusedStatesCoachmark();
     });
     closeDialog('newMachineDialog');
     landing.classList.add('hidden');
@@ -4827,6 +5100,11 @@ function attachEvents() {
       fromIndex,
     };
     e.dataTransfer.setData('text/plain', `${type}:${value}`);
+    if (transitionTrayHint) {
+      transitionVerifyPending = true;
+      transitionTrayHint('dragstart');
+      transitionTrayHint = null;
+    }
   });
 
   transitionDrawer.addEventListener('dragover', (e) => {
@@ -4901,6 +5179,22 @@ function attachEvents() {
   transitionDrawer.addEventListener('dragend', () => {
     document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
     transitionColumnDragState = null;
+    if (transitionVerifyPending && !transitionVerifyHint) {
+      transitionVerifyPending = false;
+      transitionVerifyHint = showManualCoachmark(
+        {
+          title: 'Verify Transition Table',
+          text: 'This only checks your table against the diagram—it does not validate correctness.',
+          target: () => document.getElementById('verifyTransitionTable'),
+          placement: 'left',
+        },
+        {
+          onClose: () => {
+            transitionVerifyHint = null;
+          },
+        },
+      );
+    }
   });
 
   if (transitionColumnDropzone) {
@@ -5021,6 +5315,13 @@ function attachEvents() {
     if (token.type === 'var') token.negated = false;
     tokens.splice(Math.max(0, Math.min(tokens.length, index)), 0, token);
     updateKmapExpressionTokens(kmap, tokens, tray);
+    if (payload.type === 'var' && kmapFirstHint) {
+      kmapFirstHint('completed');
+      kmapFirstHint = null;
+      requestAnimationFrame(() => {
+        showKmapCircleHint();
+      });
+    }
     markDirty();
   });
 
@@ -5158,8 +5459,16 @@ function attachEvents() {
     renderDiagram();
     if (!wasPlaced) {
       undoStack.push({ type: 'statePlacement', stateId: st.id });
-      if (state.states.filter((s) => s.placed).length === 1) {
-        requestAnimationFrame(() => startDiagramFirstStateTour(st.id));
+      const placedCount = state.states.filter((s) => s.placed).length;
+      if (placedCount === 1) {
+        requestAnimationFrame(() => showMoveStateHint(st.id));
+      }
+      if (placedCount === 2) {
+        allowCreateArrowHint = true;
+        if (placeSecondStateHint) {
+          placeSecondStateHint('completed');
+          placeSecondStateHint = null;
+        }
       }
     }
     markDirty();
@@ -5207,6 +5516,11 @@ function attachEvents() {
       selectedStateId = null;
       renderDiagram();
       if (e.button === 0 && e.altKey) {
+        if (labelArrowHint) {
+          labelArrowHint('altclick');
+          labelArrowHint = null;
+          showDiagramPanZoomHints();
+        }
         openArrowDialog(id);
         return;
       }
@@ -5234,6 +5548,12 @@ function attachEvents() {
       renderDiagram();
       const tr = state.transitions.find((t) => t.id === parseInt(targetHandle.dataset.id, 10));
       if (!tr) return;
+      let showLabelOnRelease = false;
+      if (repositionArrowHint) {
+        repositionArrowHint('grabbed');
+        repositionArrowHint = null;
+        showLabelOnRelease = true;
+      }
       const moveHandler = (ev) => {
         const from = state.states.find((s) => s.id === tr.from);
         const to = state.states.find((s) => s.id === tr.to);
@@ -5260,6 +5580,9 @@ function attachEvents() {
         document.removeEventListener('mousemove', moveHandler);
         document.removeEventListener('mouseup', upHandler);
         markDirty();
+        if (showLabelOnRelease) {
+          showArrowLabelHint(tr.id);
+        }
       };
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
@@ -5278,6 +5601,8 @@ function attachEvents() {
       const isResize = e.ctrlKey;
       const startArrowWithAlt = e.button === 0 && e.altKey;
       let moved = false;
+      let resized = false;
+      let showResizeOnRelease = false;
       if (e.button === 2 || startArrowWithAlt) {
         currentArrow = {
           from: id,
@@ -5286,15 +5611,29 @@ function attachEvents() {
           startButton: e.button,
           startWithAlt: startArrowWithAlt,
         };
+        if (allowCreateArrowHint) {
+          allowCreateArrowHint = false;
+          showCreateArrowHint(id);
+        }
         renderDiagram();
         return;
+      }
+      if (!isResize && moveStateHint) {
+        moveStateHint('grabbed');
+        moveStateHint = null;
+        showResizeOnRelease = true;
       }
       const moveHandler = (ev) => {
         const pt = getSVGPoint(ev.clientX, ev.clientY);
         if (isResize) {
+          if (resizeStateHint) {
+            resizeStateHint('resizing');
+            resizeStateHint = null;
+          }
           const dx = pt.x - st.x;
           const dy = pt.y - st.y;
           st.radius = Math.max(20, Math.sqrt(dx * dx + dy * dy));
+          resized = true;
         } else {
           st.x = pt.x + offsetX;
           st.y = pt.y + offsetY;
@@ -5307,6 +5646,12 @@ function attachEvents() {
         document.removeEventListener('mousemove', moveHandler);
         document.removeEventListener('mouseup', upHandler);
         if (moved) markDirty();
+        if (showResizeOnRelease) {
+          showResizeStateHint(id);
+        }
+        if (resized) {
+          showPlaceSecondStateHint();
+        }
       };
       document.addEventListener('mousemove', moveHandler);
       document.addEventListener('mouseup', upHandler);
@@ -5314,6 +5659,10 @@ function attachEvents() {
   });
 
   diagram.addEventListener('mouseup', (e) => {
+    if (createArrowHint) {
+      createArrowHint('mouseup');
+      createArrowHint = null;
+    }
     if (currentArrow && (e.button === currentArrow.startButton || (currentArrow.startWithAlt && e.button === 0))) {
       const targetState = e.target.closest('circle.state-node');
       if (targetState) {
@@ -5341,9 +5690,9 @@ function attachEvents() {
         undoStack.push({ type: 'transitionAddition', transitionId: newId });
         selectedArrowId = newId;
         renderDiagram();
-        if (state.transitions.length === 1) {
-          requestAnimationFrame(() => startDiagramFirstArrowTour(newId));
-        }
+        requestAnimationFrame(() => {
+          showRepositionArrowHint(newId);
+        });
         markDirty();
       }
     }
@@ -5359,6 +5708,12 @@ function attachEvents() {
     const path = e.target.closest('path.arrow-path');
     const target = handle || path;
     if (target) {
+      const labelHandle = e.target.closest('.label-handle');
+      if (labelHandle && labelArrowHint) {
+        labelArrowHint('contextmenu');
+        labelArrowHint = null;
+        showDiagramPanZoomHints();
+      }
       const id = parseInt(target.dataset.id || target.getAttribute('data-id'), 10);
       openArrowDialog(id);
     }
