@@ -203,6 +203,8 @@ let createArrowHint = null;
 let repositionArrowHint = null;
 let labelArrowHint = null;
 let panZoomHinted = false;
+let panHintClose = null;
+let zoomHintClose = null;
 let kmapDialogFunctionHint = null;
 let kmapDialogVariableHint = null;
 let kmapDialogDirectionHint = null;
@@ -713,23 +715,39 @@ function showDiagramPanZoomHints(onComplete) {
     return;
   }
   panZoomHinted = true;
-  showCoachmarkSequenceOnce(
-    onboardingKeys.diagramPanZoom,
-    [
-      {
-        title: 'Pan the canvas',
-        text: 'Shift + Drag (or middle-click drag) to pan the diagram.',
-        target: () => diagram,
-        placement: 'top',
-      },
+  const showZoomHint = () => {
+    if (zoomHintClose) return;
+    zoomHintClose = showManualCoachmark(
       {
         title: 'Zoom the canvas',
         text: 'Scroll to zoom the diagram.',
         target: () => diagram,
         placement: 'top',
+        actionLabel: 'Got it',
       },
-    ],
-    onComplete,
+      {
+        key: onboardingKeys.diagramPanZoom,
+        onClose: () => {
+          zoomHintClose = null;
+          if (onComplete) onComplete();
+        },
+      },
+    );
+  };
+  panHintClose = showManualCoachmark(
+    {
+      title: 'Pan the canvas',
+      text: 'Shift + Drag (or middle-click drag) to pan the diagram.',
+      target: () => diagram,
+      placement: 'top',
+      actionLabel: 'Next',
+    },
+    {
+      onClose: () => {
+        panHintClose = null;
+        showZoomHint();
+      },
+    },
   );
 }
 
@@ -5572,6 +5590,14 @@ function attachEvents() {
 
   diagram.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (panHintClose) {
+      panHintClose('zoom');
+      panHintClose = null;
+    }
+    if (zoomHintClose) {
+      zoomHintClose('zoom');
+      zoomHintClose = null;
+    }
     const point = getSVGPoint(e.clientX, e.clientY);
     const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     const zoomIntensity = 0.0015;
@@ -5589,6 +5615,10 @@ function attachEvents() {
       isPanning = true;
       panWithShift = e.button === 0 && e.shiftKey;
       panStart = { x: e.clientX, y: e.clientY };
+      if (panHintClose) {
+        panHintClose('pan');
+        panHintClose = null;
+      }
       e.preventDefault();
       return;
     }
