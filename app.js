@@ -609,7 +609,9 @@ function showMoveStateHint(stateId) {
       onClose: (reason) => {
         moveStateHint = null;
         if (reason !== 'grabbed') {
-          showResizeStateHint(stateId);
+          requestAnimationFrame(() => {
+            showResizeStateHint(stateId);
+          });
         }
       },
     },
