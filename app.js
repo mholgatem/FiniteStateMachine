@@ -335,10 +335,10 @@ function showManualCoachmark(step, { key, onClose } = {}) {
     popup.remove();
     window.removeEventListener('resize', reposition);
     if (key) setCoachmarkSeen(key);
-    if (onClose) onClose(reason);
     if (activeCoachmark && activeCoachmark.popup === popup) {
       activeCoachmark = null;
     }
+    if (onClose) onClose(reason);
   };
   const isNext = isNextAction(actionLabel);
   popup.querySelector('.coachmark-action').addEventListener('click', () => close('action'));
