@@ -5273,6 +5273,25 @@ function attachEvents() {
     }
   });
 
+  const showTransitionVerifyCoachmark = () => {
+    if (transitionVerifyPending && !transitionVerifyHint) {
+      transitionVerifyPending = false;
+      transitionVerifyHint = showManualCoachmark(
+        {
+          title: 'Verify Transition Table',
+          text: 'This only checks your table against the diagram—it does not validate correctness.',
+          target: () => document.getElementById('verifyTransitionTable'),
+          placement: 'left',
+        },
+        {
+          onClose: () => {
+            transitionVerifyHint = null;
+          },
+        },
+      );
+    }
+  };
+
   transitionDrawer.addEventListener('drop', (e) => {
     const tray = e.target.closest('#transitionColumnDropzone');
     if (!tray) return;
@@ -5315,27 +5334,13 @@ function attachEvents() {
     state.transitionTable.columns = columns;
     renderTransitionTable();
     markDirty();
+    showTransitionVerifyCoachmark();
   });
 
   const handleTransitionDragEnd = () => {
     document.querySelectorAll('.kmap-drop-marker').forEach((el) => el.remove());
     transitionColumnDragState = null;
-    if (transitionVerifyPending && !transitionVerifyHint) {
-      transitionVerifyPending = false;
-      transitionVerifyHint = showManualCoachmark(
-        {
-          title: 'Verify Transition Table',
-          text: 'This only checks your table against the diagram—it does not validate correctness.',
-          target: () => document.getElementById('verifyTransitionTable'),
-          placement: 'left',
-        },
-        {
-          onClose: () => {
-            transitionVerifyHint = null;
-          },
-        },
-      );
-    }
+    showTransitionVerifyCoachmark();
   };
   document.addEventListener('dragend', handleTransitionDragEnd);
 
