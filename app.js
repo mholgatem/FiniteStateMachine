@@ -633,11 +633,13 @@ function showResizeStateHint(stateId) {
       onClose: () => {
         resizeStateHint = null;
         pendingPlaceSecondHint = true;
-        showDiagramPanZoomHints(() => {
-          if (pendingPlaceSecondHint) {
-            pendingPlaceSecondHint = false;
-            showPlaceSecondStateHint();
-          }
+        requestAnimationFrame(() => {
+          showDiagramPanZoomHints(() => {
+            if (pendingPlaceSecondHint) {
+              pendingPlaceSecondHint = false;
+              showPlaceSecondStateHint();
+            }
+          });
         });
       },
     },
