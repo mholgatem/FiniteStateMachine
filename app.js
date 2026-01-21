@@ -825,6 +825,7 @@ function showKmapDialogTour() {
       text: 'Drag a token here to set the function identifier.',
       target: () => kmapLabelDropzone,
       placement: 'right',
+      actionLabel: 'Next',
     },
     {
       key: onboardingKeys.kmapDialogFunction,
@@ -843,6 +844,7 @@ function showKmapVariablesHint() {
       text: 'Drag tokens here to set the independent variables (MSB → LSB).',
       target: () => kmapVariablesDropzone,
       placement: 'right',
+      actionLabel: 'Next',
     },
     {
       key: onboardingKeys.kmapDialogVariables,
