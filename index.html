@@ -140,6 +140,26 @@
     </aside>
     <section class="playmat">
       <div class="version-label">v1.8.0</div>
+      <div class="diagram-controls">
+        <button id="diagramControlsBtn" class="ghost diagram-controls-btn" type="button" aria-label="Show diagram controls">
+          ?
+        </button>
+        <div id="diagramControlsPopup" class="diagram-controls-popup hidden" role="dialog" aria-label="Diagram controls">
+          <div class="diagram-controls-header">
+            <span>Diagram controls</span>
+            <button id="diagramControlsClose" class="ghost" type="button" aria-label="Close diagram controls">✕</button>
+          </div>
+          <ul>
+            <li><b>Drag</b> a state to move it.</li>
+            <li><b>Ctrl + Drag</b> a state to resize it.</li>
+            <li><b>Alt + Drag</b> (or <b>Right-click Drag</b>) to create an arrow.</li>
+            <li><b>Drag</b> the blue dot on an arrow to curve or reposition it.</li>
+            <li><b>Alt + Click</b> (or <b>Right-click</b>) a label to set values.</li>
+            <li><b>Shift + Drag</b> or <b>Middle-click Drag</b> to pan.</li>
+            <li><b>Scroll</b> to zoom.</li>
+          </ul>
+        </div>
+      </div>
       <svg id="diagram" width="100%" height="100%">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
@@ -244,10 +264,10 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>State Binary</th>
+                <th id="stateBinaryHeader">State Binary</th>
                 <th>Label</th>
                 <th>Description</th>
-                <th class="moore-only">Outputs</th>
+                <th id="stateOutputsHeader" class="moore-only">Outputs</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -352,6 +372,8 @@
   </div>
 
   <div id="kmapZipStatus" class="kmap-zip-status hidden">Zipping kmap images...</div>
+
+  <div id="coachmarkLayer" class="coachmark-layer" aria-live="polite"></div>
 
   <template id="paletteItemTemplate">
     <div class="palette-item" draggable="true">
