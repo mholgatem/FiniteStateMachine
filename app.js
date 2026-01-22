@@ -12,6 +12,8 @@ const state = {
   kmaps: [],
 };
 
+const in_development = true;
+
 let currentArrow = null;
 let selectedArrowId = null;
 let selectedStateId = null;
@@ -63,6 +65,8 @@ const saveImageMenu = document.getElementById('saveImageMenu');
 const saveImageDropdown = document.getElementById('saveImageDropdown');
 const fileMenu = document.getElementById('fileMenu');
 const fileMenuButton = document.getElementById('fileMenuButton');
+const loadExampleButton = document.getElementById('loadExampleButton');
+const loadExampleLanding = document.getElementById('loadExampleLanding');
 const settingsMenu = document.getElementById('settingsMenu');
 const settingsMenuButton = document.getElementById('settingsMenuButton');
 const transitionDrawerHandle = document.getElementById('transitionDrawerHandle');
@@ -1018,6 +1022,29 @@ async function promptToSaveBeforeLoad(next) {
     if (!saved) return;
   }
   await next();
+}
+
+async function loadExampleState(options = {}) {
+  const { hideLanding = false, closeMenu = false } = options;
+  await promptToSaveBeforeLoad(async () => {
+    try {
+      const response = await fetch('test-file.json');
+      if (!response.ok) {
+        window.alert('Unable to load example file.');
+        return;
+      }
+      const data = await response.json();
+      loadState(data);
+      if (hideLanding) {
+        landing.classList.add('hidden');
+      }
+    } catch (error) {
+      window.alert('Unable to load example file.');
+    }
+  });
+  if (closeMenu) {
+    closeAllDropdowns();
+  }
 }
 
 function prepareNewMachineDialog() {
@@ -4662,6 +4689,18 @@ function attachEvents() {
   if (kmapToggleBtn && !transitionDrawerOpenedOnce) {
     kmapToggleBtn.disabled = true;
     kmapToggleBtn.title = 'Open the State Transition Table to enable K-maps';
+  }
+
+  if (!in_development) {
+    loadExampleButton?.remove();
+    loadExampleLanding?.remove();
+  } else {
+    loadExampleButton?.addEventListener('click', async () => {
+      await loadExampleState({ closeMenu: true });
+    });
+    loadExampleLanding?.addEventListener('click', async () => {
+      await loadExampleState({ hideLanding: true });
+    });
   }
 
   document.querySelectorAll('[data-close]').forEach((btn) => {
