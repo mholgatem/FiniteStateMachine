@@ -1,0 +1,1808 @@
+{
+  "name": "Street Lights",
+  "type": "moore",
+  "numStates": 8,
+  "inputs": [
+    "C_1",
+    "C_2"
+  ],
+  "outputs": [
+    "M_G",
+    "M_Y",
+    "M_R",
+    "S_G",
+    "S_Y",
+    "S_R"
+  ],
+  "states": [
+    {
+      "id": 0,
+      "label": "Main Red, Side Red",
+      "description": "Both red - Main Street",
+      "binary": "000",
+      "outputs": [
+        "0",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1"
+      ],
+      "placed": true,
+      "x": 376.6151123046875,
+      "y": -336.9210567474365,
+      "radius": 104.74103404388944,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 3,
+      "label": "Main Red, Side Green",
+      "description": "Main red, Side green",
+      "binary": "001",
+      "outputs": [
+        "0",
+        "0",
+        "1",
+        "1",
+        "0",
+        "0"
+      ],
+      "placed": true,
+      "x": 294.74859619140625,
+      "y": 585.5671997070312,
+      "radius": 96.8061241177347,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 7,
+      "label": "Unused",
+      "description": "",
+      "binary": "010",
+      "outputs": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "placed": false,
+      "x": 17.033769607543945,
+      "y": -509.814453125,
+      "radius": 57,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 4,
+      "label": "Main Red, Side Yellow",
+      "description": "Main red, Side yellow",
+      "binary": "011",
+      "outputs": [
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "0"
+      ],
+      "placed": true,
+      "x": 71.9243392944336,
+      "y": 134.86825561523438,
+      "radius": 110.80669467514883,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 1,
+      "label": "Main Green, Side Red",
+      "description": "Main green, Side red",
+      "binary": "100",
+      "outputs": [
+        "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "placed": true,
+      "x": 919.6907501220703,
+      "y": -324.6019854545593,
+      "radius": 108.36596986813923,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 5,
+      "label": "Both Off",
+      "description": "Both off (Flash)",
+      "binary": "101",
+      "outputs": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "placed": true,
+      "x": 610.7191772460938,
+      "y": 113.01446533203125,
+      "radius": 110.60926815824796,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 2,
+      "label": "Main Yellow, Side Red",
+      "description": "Main yellow, Side red",
+      "binary": "110",
+      "outputs": [
+        "0",
+        "1",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "placed": true,
+      "x": 1199.330810546875,
+      "y": 98.9120864868164,
+      "radius": 98.8837860233147,
+      "hasBeenPlaced": true
+    },
+    {
+      "id": 6,
+      "label": "Main Red, Side Red",
+      "description": "Both Red - Side Ave",
+      "binary": "111",
+      "outputs": [
+        "0",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1"
+      ],
+      "placed": true,
+      "x": 893.3709106445312,
+      "y": 594.6619262695312,
+      "radius": 105.5582762571273,
+      "hasBeenPlaced": true
+    }
+  ],
+  "transitions": [
+    {
+      "id": 1768775716134,
+      "from": 0,
+      "to": 1,
+      "inputs": "C_1=0, C_2=0",
+      "outputs": "",
+      "arcOffset": -60.8293841502688,
+      "inputValues": [
+        "0",
+        "0"
+      ],
+      "outputValues": [],
+      "labelT": 0.2125
+    },
+    {
+      "id": 1768775754095,
+      "from": 1,
+      "to": 2,
+      "inputs": "C_1=X, C_2=X",
+      "outputs": "",
+      "arcOffset": -78.86794861001573,
+      "inputValues": [
+        "X",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.2375
+    },
+    {
+      "id": 1768775991856,
+      "from": 6,
+      "to": 3,
+      "inputs": "C_1=0, C_2=0",
+      "outputs": "",
+      "arcOffset": -100.91144535509217,
+      "inputValues": [
+        "0",
+        "0"
+      ],
+      "outputValues": [],
+      "labelT": 0.25
+    },
+    {
+      "id": 1768776001109,
+      "from": 3,
+      "to": 4,
+      "inputs": "C_1=X, C_2=X",
+      "outputs": "",
+      "arcOffset": -99.71119831773224,
+      "inputValues": [
+        "X",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1768776122774,
+      "from": 0,
+      "to": 5,
+      "inputs": "C_1=0, C_2=1",
+      "outputs": "",
+      "arcOffset": -76.39896784661082,
+      "inputValues": [
+        "0",
+        "1"
+      ],
+      "outputValues": [],
+      "labelT": 0.25
+    },
+    {
+      "id": 1768776238072,
+      "from": 6,
+      "to": 5,
+      "inputs": "C_1=0, C_2=1",
+      "outputs": "",
+      "arcOffset": -98.00303863823179,
+      "inputValues": [
+        "0",
+        "1"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1768776388139,
+      "from": 5,
+      "to": 2,
+      "inputs": "C_1=1, C_2=0",
+      "outputs": "",
+      "arcOffset": 44.85742294776164,
+      "inputValues": [
+        "1",
+        "0"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1768776369683,
+      "from": 2,
+      "to": 5,
+      "inputs": "C_1=1, C_2=0",
+      "outputs": "",
+      "arcOffset": 42.18133671029658,
+      "inputValues": [
+        "1",
+        "0"
+      ],
+      "outputValues": [],
+      "labelT": 0.1125
+    },
+    {
+      "id": 1768776731237,
+      "from": 4,
+      "to": 5,
+      "inputs": "C_1=1, C_2=1",
+      "outputs": "",
+      "arcOffset": -35.02863395552032,
+      "inputValues": [
+        "1",
+        "1"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1768776753402,
+      "from": 5,
+      "to": 4,
+      "inputs": "C_1=1, C_2=1",
+      "outputs": "",
+      "arcOffset": -55.647053079696256,
+      "inputValues": [
+        "1",
+        "1"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1768776771660,
+      "from": 2,
+      "to": 6,
+      "inputs": "C_1=1, C_2=1",
+      "outputs": "",
+      "arcOffset": -210.69229321223378,
+      "inputValues": [
+        "1",
+        "1"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1768777006444,
+      "from": 4,
+      "to": 0,
+      "inputs": "C_1=1, C_2=0",
+      "outputs": "",
+      "arcOffset": -167.66428774461536,
+      "inputValues": [
+        "1",
+        "0"
+      ],
+      "outputValues": [],
+      "labelT": 0.2
+    },
+    {
+      "id": 1769111501003,
+      "from": 4,
+      "to": 0,
+      "inputs": "C_1=0, C_2=X",
+      "outputs": "",
+      "arcOffset": -124.16593322897776,
+      "inputValues": [
+        "0",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1769111546524,
+      "from": 2,
+      "to": 6,
+      "inputs": "C_1=0, C_2=X",
+      "outputs": "",
+      "arcOffset": -149.9163533724768,
+      "inputValues": [
+        "0",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.15
+    },
+    {
+      "id": 1769111571672,
+      "from": 6,
+      "to": 5,
+      "inputs": "C_1=1, C_2=X",
+      "outputs": "",
+      "arcOffset": -60.67097103112357,
+      "inputValues": [
+        "1",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1769111597240,
+      "from": 0,
+      "to": 5,
+      "inputs": "C_1=1, C_2=X",
+      "outputs": "",
+      "arcOffset": -103.00617206066072,
+      "inputValues": [
+        "1",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    },
+    {
+      "id": 1769111681516,
+      "from": 5,
+      "to": 0,
+      "inputs": "C_1=0, C_2=X",
+      "outputs": "",
+      "arcOffset": 39.65453566864344,
+      "inputValues": [
+        "0",
+        "X"
+      ],
+      "outputValues": [],
+      "labelT": 0.12
+    }
+  ],
+  "showBinary": false,
+  "transitionTable": {
+    "columns": [
+      {
+        "key": "q_2__col_1768668900117_1f4ec6dcb544b",
+        "baseKey": "q_2",
+        "label": "Q_2",
+        "type": "value"
+      },
+      {
+        "key": "q_1__col_1768668902111_b5cb9f3e10fa1",
+        "baseKey": "q_1",
+        "label": "Q_1",
+        "type": "value"
+      },
+      {
+        "key": "q_0__col_1768668904661_1cd4436ca29fc",
+        "baseKey": "q_0",
+        "label": "Q_0",
+        "type": "value"
+      },
+      {
+        "key": "spacer_1768668911424_ce0f04ce211828",
+        "baseKey": "spacer",
+        "label": "",
+        "type": "spacer"
+      },
+      {
+        "key": "in_0__col_1768668913595_885d72b50cb89",
+        "baseKey": "in_0",
+        "label": "C_1",
+        "type": "value"
+      },
+      {
+        "key": "in_1__col_1768668918689_f9fef77f594418",
+        "baseKey": "in_1",
+        "label": "C_2",
+        "type": "value"
+      },
+      {
+        "key": "spacer_1768668921095_095f54f1f9d3a8",
+        "baseKey": "spacer",
+        "label": "",
+        "type": "spacer"
+      },
+      {
+        "key": "next_q_2__col_1768668922919_3f448d9fcaac8",
+        "baseKey": "next_q_2",
+        "label": "Q_2^+",
+        "type": "value"
+      },
+      {
+        "key": "next_q_1__col_1768668924785_92653748fdea48",
+        "baseKey": "next_q_1",
+        "label": "Q_1^+",
+        "type": "value"
+      },
+      {
+        "key": "next_q_0__col_1768668926787_3092313b67bab",
+        "baseKey": "next_q_0",
+        "label": "Q_0^+",
+        "type": "value"
+      },
+      {
+        "key": "spacer_1768668929889_8f80f85aef5eb8",
+        "baseKey": "spacer",
+        "label": "",
+        "type": "spacer"
+      },
+      {
+        "key": "out_0__col_1768668932367_3838890e543f88",
+        "baseKey": "out_0",
+        "label": "M_G",
+        "type": "value"
+      },
+      {
+        "key": "out_1__col_1768668944378_fdcbaa94e7002",
+        "baseKey": "out_1",
+        "label": "M_Y",
+        "type": "value"
+      },
+      {
+        "key": "out_2__col_1768668948481_a53abcc193fb38",
+        "baseKey": "out_2",
+        "label": "M_R",
+        "type": "value"
+      },
+      {
+        "key": "out_3__col_1768668954085_c58b913af55678",
+        "baseKey": "out_3",
+        "label": "S_G",
+        "type": "value"
+      },
+      {
+        "key": "out_4__col_1768668957499_badb5db4d48048",
+        "baseKey": "out_4",
+        "label": "S_Y",
+        "type": "value"
+      },
+      {
+        "key": "out_5__col_1768668962073_b1bc719dd90528",
+        "baseKey": "out_5",
+        "label": "S_R",
+        "type": "value"
+      }
+    ],
+    "availableColumns": [
+      {
+        "key": "q_2",
+        "baseKey": "q_2",
+        "label": "Q_2",
+        "type": "value"
+      },
+      {
+        "key": "q_1",
+        "baseKey": "q_1",
+        "label": "Q_1",
+        "type": "value"
+      },
+      {
+        "key": "q_0",
+        "baseKey": "q_0",
+        "label": "Q_0",
+        "type": "value"
+      },
+      {
+        "key": "next_q_2",
+        "baseKey": "next_q_2",
+        "label": "Q_2^+",
+        "type": "value"
+      },
+      {
+        "key": "next_q_1",
+        "baseKey": "next_q_1",
+        "label": "Q_1^+",
+        "type": "value"
+      },
+      {
+        "key": "next_q_0",
+        "baseKey": "next_q_0",
+        "label": "Q_0^+",
+        "type": "value"
+      },
+      {
+        "key": "in_0",
+        "baseKey": "in_0",
+        "label": "C_1",
+        "type": "value"
+      },
+      {
+        "key": "in_1",
+        "baseKey": "in_1",
+        "label": "C_2",
+        "type": "value"
+      },
+      {
+        "key": "out_0",
+        "baseKey": "out_0",
+        "label": "M_G",
+        "type": "value"
+      },
+      {
+        "key": "out_1",
+        "baseKey": "out_1",
+        "label": "M_Y",
+        "type": "value"
+      },
+      {
+        "key": "out_2",
+        "baseKey": "out_2",
+        "label": "M_R",
+        "type": "value"
+      },
+      {
+        "key": "out_3",
+        "baseKey": "out_3",
+        "label": "S_G",
+        "type": "value"
+      },
+      {
+        "key": "out_4",
+        "baseKey": "out_4",
+        "label": "S_Y",
+        "type": "value"
+      },
+      {
+        "key": "out_5",
+        "baseKey": "out_5",
+        "label": "S_R",
+        "type": "value"
+      },
+      {
+        "key": "spacer",
+        "baseKey": "spacer",
+        "label": "",
+        "type": "spacer",
+        "allowMultiple": true
+      }
+    ],
+    "rows": [
+      {
+        "key": "0|00",
+        "stateId": 0,
+        "inputCombo": "00"
+      },
+      {
+        "key": "0|01",
+        "stateId": 0,
+        "inputCombo": "01"
+      },
+      {
+        "key": "0|10",
+        "stateId": 0,
+        "inputCombo": "10"
+      },
+      {
+        "key": "0|11",
+        "stateId": 0,
+        "inputCombo": "11"
+      },
+      {
+        "key": "1|00",
+        "stateId": 1,
+        "inputCombo": "00"
+      },
+      {
+        "key": "1|01",
+        "stateId": 1,
+        "inputCombo": "01"
+      },
+      {
+        "key": "1|10",
+        "stateId": 1,
+        "inputCombo": "10"
+      },
+      {
+        "key": "1|11",
+        "stateId": 1,
+        "inputCombo": "11"
+      },
+      {
+        "key": "2|00",
+        "stateId": 2,
+        "inputCombo": "00"
+      },
+      {
+        "key": "2|01",
+        "stateId": 2,
+        "inputCombo": "01"
+      },
+      {
+        "key": "2|10",
+        "stateId": 2,
+        "inputCombo": "10"
+      },
+      {
+        "key": "2|11",
+        "stateId": 2,
+        "inputCombo": "11"
+      },
+      {
+        "key": "3|00",
+        "stateId": 3,
+        "inputCombo": "00"
+      },
+      {
+        "key": "3|01",
+        "stateId": 3,
+        "inputCombo": "01"
+      },
+      {
+        "key": "3|10",
+        "stateId": 3,
+        "inputCombo": "10"
+      },
+      {
+        "key": "3|11",
+        "stateId": 3,
+        "inputCombo": "11"
+      },
+      {
+        "key": "4|00",
+        "stateId": 4,
+        "inputCombo": "00"
+      },
+      {
+        "key": "4|01",
+        "stateId": 4,
+        "inputCombo": "01"
+      },
+      {
+        "key": "4|10",
+        "stateId": 4,
+        "inputCombo": "10"
+      },
+      {
+        "key": "4|11",
+        "stateId": 4,
+        "inputCombo": "11"
+      },
+      {
+        "key": "5|00",
+        "stateId": 5,
+        "inputCombo": "00"
+      },
+      {
+        "key": "5|01",
+        "stateId": 5,
+        "inputCombo": "01"
+      },
+      {
+        "key": "5|10",
+        "stateId": 5,
+        "inputCombo": "10"
+      },
+      {
+        "key": "5|11",
+        "stateId": 5,
+        "inputCombo": "11"
+      },
+      {
+        "key": "6|00",
+        "stateId": 6,
+        "inputCombo": "00"
+      },
+      {
+        "key": "6|01",
+        "stateId": 6,
+        "inputCombo": "01"
+      },
+      {
+        "key": "6|10",
+        "stateId": 6,
+        "inputCombo": "10"
+      },
+      {
+        "key": "6|11",
+        "stateId": 6,
+        "inputCombo": "11"
+      },
+      {
+        "key": "7|00",
+        "stateId": 7,
+        "inputCombo": "00"
+      },
+      {
+        "key": "7|01",
+        "stateId": 7,
+        "inputCombo": "01"
+      },
+      {
+        "key": "7|10",
+        "stateId": 7,
+        "inputCombo": "10"
+      },
+      {
+        "key": "7|11",
+        "stateId": 7,
+        "inputCombo": "11"
+      }
+    ],
+    "valueColumns": [
+      {
+        "key": "q_2__col_1768668900117_1f4ec6dcb544b",
+        "baseKey": "q_2",
+        "label": "Q_2",
+        "type": "value"
+      },
+      {
+        "key": "q_1__col_1768668902111_b5cb9f3e10fa1",
+        "baseKey": "q_1",
+        "label": "Q_1",
+        "type": "value"
+      },
+      {
+        "key": "q_0__col_1768668904661_1cd4436ca29fc",
+        "baseKey": "q_0",
+        "label": "Q_0",
+        "type": "value"
+      },
+      {
+        "key": "in_0__col_1768668913595_885d72b50cb89",
+        "baseKey": "in_0",
+        "label": "C_1",
+        "type": "value"
+      },
+      {
+        "key": "in_1__col_1768668918689_f9fef77f594418",
+        "baseKey": "in_1",
+        "label": "C_2",
+        "type": "value"
+      },
+      {
+        "key": "next_q_2__col_1768668922919_3f448d9fcaac8",
+        "baseKey": "next_q_2",
+        "label": "Q_2^+",
+        "type": "value"
+      },
+      {
+        "key": "next_q_1__col_1768668924785_92653748fdea48",
+        "baseKey": "next_q_1",
+        "label": "Q_1^+",
+        "type": "value"
+      },
+      {
+        "key": "next_q_0__col_1768668926787_3092313b67bab",
+        "baseKey": "next_q_0",
+        "label": "Q_0^+",
+        "type": "value"
+      },
+      {
+        "key": "out_0__col_1768668932367_3838890e543f88",
+        "baseKey": "out_0",
+        "label": "M_G",
+        "type": "value"
+      },
+      {
+        "key": "out_1__col_1768668944378_fdcbaa94e7002",
+        "baseKey": "out_1",
+        "label": "M_Y",
+        "type": "value"
+      },
+      {
+        "key": "out_2__col_1768668948481_a53abcc193fb38",
+        "baseKey": "out_2",
+        "label": "M_R",
+        "type": "value"
+      },
+      {
+        "key": "out_3__col_1768668954085_c58b913af55678",
+        "baseKey": "out_3",
+        "label": "S_G",
+        "type": "value"
+      },
+      {
+        "key": "out_4__col_1768668957499_badb5db4d48048",
+        "baseKey": "out_4",
+        "label": "S_Y",
+        "type": "value"
+      },
+      {
+        "key": "out_5__col_1768668962073_b1bc719dd90528",
+        "baseKey": "out_5",
+        "label": "S_R",
+        "type": "value"
+      }
+    ],
+    "groupSize": 4,
+    "headers": [ "q_2__col_1768668900117_1f4ec6dcb544b", "q_1__col_1768668902111_b5cb9f3e10fa1", "q_0__col_1768668904661_1cd4436ca29fc", "in_0__col_1768668913595_885d72b50cb89", "in_1__col_1768668918689_f9fef77f594418", "next_q_2__col_1768668922919_3f448d9fcaac8", "next_q_1__col_1768668924785_92653748fdea48", "next_q_0__col_1768668926787_3092313b67bab", "out_0__col_1768668932367_3838890e543f88", "out_1__col_1768668944378_fdcbaa94e7002", "out_2__col_1768668948481_a53abcc193fb38", "out_3__col_1768668954085_c58b913af55678", "out_4__col_1768668957499_badb5db4d48048", "out_5__col_1768668962073_b1bc719dd90528" ],
+    "data": [
+      [ 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1 ],
+      [ 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1 ],
+      [ 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1 ],
+      [ 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1 ],
+      [ 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0 ],
+      [ 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0 ],
+      [ 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0 ],
+      [ 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0 ],
+      [ 0, 1, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2 ],
+      [ 0, 1, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2 ],
+      [ 0, 1, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2 ],
+      [ 0, 1, 0, 1, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2 ],
+      [ 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0 ],
+      [ 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0 ],
+      [ 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0 ],
+      [ 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0 ],
+      [ 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1 ],
+      [ 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1 ],
+      [ 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1 ],
+      [ 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 1 ],
+      [ 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+      [ 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+      [ 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0 ],
+      [ 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0 ],
+      [ 1, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1 ],
+      [ 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 ],
+      [ 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 ],
+      [ 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1 ],
+      [ 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1 ],
+      [ 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1 ],
+      [ 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1 ],
+      [ 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1 ]
+    ]
+  },
+  "transitionTableVerified": true,
+  "kmaps": [
+    {
+      "id": 1768928114789,
+      "label": "Q_2^+",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0",
+        "C_1",
+        "C_2"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-0": "1",
+        "1-0": "1",
+        "2-0": "1",
+        "3-0": "1",
+        "0-1": "0",
+        "1-1": "0",
+        "2-1": "0",
+        "3-1": "0",
+        "0-3": "X",
+        "1-3": "X",
+        "2-3": "X",
+        "3-3": "X",
+        "0-2": "0",
+        "1-2": "0",
+        "2-2": "1",
+        "3-2": "0",
+        "0-4": "1",
+        "1-4": "1",
+        "2-4": "1",
+        "3-4": "1",
+        "0-5": "0",
+        "1-5": "0",
+        "2-5": "0",
+        "3-5": "1",
+        "0-7": "1",
+        "1-7": "1",
+        "2-7": "1",
+        "3-7": "1",
+        "0-6": "0",
+        "1-6": "1",
+        "2-6": "1",
+        "3-6": "1"
+      },
+      "expression": "Q_1 C_1 C_2 + Q_2 Q_1 C_2 + Q_2 C_1 ~C_2 + ~Q_0",
+      "functionToken": {
+        "key": "next_q_2",
+        "baseKey": "next_q_2",
+        "label": "Q_2^+",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        },
+        {
+          "key": "in_0",
+          "baseKey": "in_0",
+          "label": "C_1",
+          "type": "value"
+        },
+        {
+          "key": "in_1",
+          "baseKey": "in_1",
+          "label": "C_2",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_2",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_2",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_2",
+          "negated": true
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        }
+      ],
+      "circleSectionSignatures": [
+        "Q_1 C_1 C_2",
+        "Q_2 Q_1 C_2",
+        "Q_2 C_1 ~C_2",
+        "~Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768928492126,
+      "label": "Q_1^+",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0",
+        "C_1",
+        "C_2"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-0": "0",
+        "1-0": "0",
+        "2-0": "0",
+        "3-0": "0",
+        "0-1": "1",
+        "1-1": "1",
+        "2-1": "1",
+        "3-1": "1",
+        "0-3": "X",
+        "1-3": "X",
+        "2-3": "X",
+        "3-3": "X",
+        "0-2": "0",
+        "1-2": "0",
+        "2-2": "0",
+        "3-2": "0",
+        "0-4": "1",
+        "1-4": "1",
+        "2-4": "1",
+        "3-4": "1",
+        "0-5": "0",
+        "1-5": "0",
+        "2-5": "1",
+        "3-5": "1",
+        "0-7": "1",
+        "1-7": "1",
+        "2-7": "1",
+        "3-7": "0",
+        "0-6": "0",
+        "1-6": "0",
+        "2-6": "0",
+        "3-6": "0"
+      },
+      "expression": "Q_1 ~Q_0 ~C_1 + Q_1 ~Q_0 C_2 + Q_2 ~Q_1 ~Q_0 + ~Q_1 Q_0 C_1 + ~Q_2 ~Q_1 Q_0",
+      "functionToken": {
+        "key": "next_q_1",
+        "baseKey": "next_q_1",
+        "label": "Q_1^+",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        },
+        {
+          "key": "in_0",
+          "baseKey": "in_0",
+          "label": "C_1",
+          "type": "value"
+        },
+        {
+          "key": "in_1",
+          "baseKey": "in_1",
+          "label": "C_2",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "C_1",
+          "negated": true
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "C_2",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_1",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": false
+        }
+      ],
+      "circleSectionSignatures": [
+        "Q_1 ~Q_0 ~C_1",
+        "Q_1 ~Q_0 C_2",
+        "Q_2 ~Q_1 ~Q_0",
+        "~Q_1 Q_0 C_1",
+        "~Q_2 ~Q_1 Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768928604156,
+      "label": "Q_0^+",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0",
+        "C_1",
+        "C_2"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-0": "0",
+        "1-0": "1",
+        "2-0": "1",
+        "3-0": "1",
+        "0-1": "1",
+        "1-1": "1",
+        "2-1": "1",
+        "3-1": "1",
+        "0-3": "X",
+        "1-3": "X",
+        "2-3": "X",
+        "3-3": "X",
+        "0-2": "0",
+        "1-2": "0",
+        "2-2": "1",
+        "3-2": "0",
+        "0-4": "0",
+        "1-4": "0",
+        "2-4": "0",
+        "3-4": "0",
+        "0-5": "0",
+        "1-5": "0",
+        "2-5": "1",
+        "3-5": "0",
+        "0-7": "1",
+        "1-7": "1",
+        "2-7": "1",
+        "3-7": "1",
+        "3-6": "1",
+        "2-6": "1",
+        "1-6": "1",
+        "0-6": "1"
+      },
+      "expression": "Q_0 C_1 C_2 + ~Q_2 ~Q_1 C_2 + ~Q_2 ~Q_1 C_1 + Q_2 Q_1 + ~Q_2 ~Q_1 Q_0",
+      "functionToken": {
+        "key": "next_q_0",
+        "baseKey": "next_q_0",
+        "label": "Q_0^+",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        },
+        {
+          "key": "in_0",
+          "baseKey": "in_0",
+          "label": "C_1",
+          "type": "value"
+        },
+        {
+          "key": "in_1",
+          "baseKey": "in_1",
+          "label": "C_2",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "C_2",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "C_2",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "C_1",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": false
+        }
+      ],
+      "circleSectionSignatures": [
+        "Q_0 C_1 C_2",
+        "~Q_2 ~Q_1 C_2",
+        "~Q_2 ~Q_1 C_1",
+        "Q_2 Q_1",
+        "~Q_2 ~Q_1 Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768937657081,
+      "label": "M_G",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-1": "X",
+        "0-3": "1"
+      },
+      "expression": "Q_2 ~Q_1 ~Q_0",
+      "functionToken": {
+        "key": "out_0",
+        "baseKey": "out_0",
+        "label": "M_G",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        }
+      ],
+      "circleSectionSignatures": [
+        "Q_2 ~Q_1 ~Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768937760831,
+      "label": "M_Y",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-1": "X",
+        "0-2": "1"
+      },
+      "expression": "Q_1 ~Q_0",
+      "functionToken": {
+        "key": "out_1",
+        "baseKey": "out_1",
+        "label": "M_Y",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        }
+      ],
+      "circleSectionSignatures": [
+        "Q_1 ~Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768937811392,
+      "label": "M_R",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-0": "1",
+        "1-0": "1",
+        "0-1": "X",
+        "1-1": "1",
+        "1-2": "1"
+      },
+      "expression": "~Q_2 + Q_1 Q_0",
+      "functionToken": {
+        "key": "out_2",
+        "baseKey": "out_2",
+        "label": "M_R",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": false
+        }
+      ],
+      "circleSectionSignatures": [
+        "~Q_2",
+        "Q_1 Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768937946514,
+      "label": "S_G",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-1": "X",
+        "1-0": "1"
+      },
+      "expression": "~Q_2 ~Q_1 Q_0",
+      "functionToken": {
+        "key": "out_3",
+        "baseKey": "out_3",
+        "label": "S_G",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": false
+        }
+      ],
+      "circleSectionSignatures": [
+        "~Q_2 ~Q_1 Q_0"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768938003382,
+      "label": "S_Y",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-1": "X",
+        "1-1": "1"
+      },
+      "expression": "~Q_2 Q_1",
+      "functionToken": {
+        "key": "out_4",
+        "baseKey": "out_4",
+        "label": "S_Y",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": true
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        }
+      ],
+      "circleSectionSignatures": [
+        "~Q_2 Q_1"
+      ],
+      "circleSectionAnimations": {}
+    },
+    {
+      "id": 1768938040480,
+      "label": "S_R",
+      "variables": [
+        "Q_2",
+        "Q_1",
+        "Q_0"
+      ],
+      "type": "sop",
+      "direction": "horizontal",
+      "cells": {
+        "0-0": "1",
+        "0-1": "X",
+        "0-3": "1",
+        "0-2": "1",
+        "1-2": "1"
+      },
+      "expression": "~Q_0 + Q_2 Q_1",
+      "functionToken": {
+        "key": "out_5",
+        "baseKey": "out_5",
+        "label": "S_R",
+        "type": "value"
+      },
+      "variableTokens": [
+        {
+          "key": "q_2",
+          "baseKey": "q_2",
+          "label": "Q_2",
+          "type": "value"
+        },
+        {
+          "key": "q_1",
+          "baseKey": "q_1",
+          "label": "Q_1",
+          "type": "value"
+        },
+        {
+          "key": "q_0",
+          "baseKey": "q_0",
+          "label": "Q_0",
+          "type": "value"
+        }
+      ],
+      "expressionTokens": [
+        {
+          "type": "var",
+          "value": "Q_0",
+          "negated": true
+        },
+        {
+          "type": "op",
+          "value": "+"
+        },
+        {
+          "type": "var",
+          "value": "Q_2",
+          "negated": false
+        },
+        {
+          "type": "var",
+          "value": "Q_1",
+          "negated": false
+        }
+      ],
+      "circleSectionSignatures": [
+        "~Q_0",
+        "Q_2 Q_1"
+      ],
+      "circleSectionAnimations": {}
+    }
+  ]
+}
