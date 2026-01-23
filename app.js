@@ -4303,6 +4303,38 @@ function captureDefinitionTableImage() {
   });
 }
 
+async function captureDiagramImage() {
+  const playmat = document.querySelector('.playmat');
+  if (!playmat) return;
+
+  const previousSelectedStateId = selectedStateId;
+  const previousSelectedArrowId = selectedArrowId;
+
+  selectedStateId = null;
+  selectedArrowId = null;
+  renderDiagram();
+
+  playmat.querySelectorAll('.arc-handle').forEach((handle) => {
+    handle.style.display = 'none';
+  });
+  if (diagramControlsBtn) {
+    diagramControlsBtn.style.display = 'none';
+  }
+
+  await new Promise(requestAnimationFrame);
+
+  try {
+    await captureImage(playmat, `${state.name}-state-diagram.png`);
+  } finally {
+    if (diagramControlsBtn) {
+      diagramControlsBtn.style.display = '';
+    }
+    selectedStateId = previousSelectedStateId;
+    selectedArrowId = previousSelectedArrowId;
+    renderDiagram();
+  }
+}
+
 function openTransitionDrawer() {
   renderTransitionTable();
   transitionDrawer.classList.add('open');
@@ -4996,7 +5028,7 @@ function attachEvents() {
   });
   document.getElementById('saveImageDiagram').addEventListener('click', () => {
     closeAllDropdowns();
-    captureImage(document.querySelector('.playmat'), `${state.name}-state-diagram.png`);
+    captureDiagramImage();
   });
   document.getElementById('saveImageTransitionTable').addEventListener('click', () => {
     closeAllDropdowns();
